@@ -3,17 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NailArt Studio Pro - Firebase</title>
+    <title>NailArt Studio Pro - Managed</title>
     
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- React & Babel -->
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
-    <!-- Firebase Compat SDKs -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -22,16 +18,16 @@
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,700;1,700&display=swap');
         body { font-family: 'Plus Jakarta Sans', sans-serif; }
         .font-serif { font-family: 'Playfair Display', serif; }
-        .glass { background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.3); }
+        .glass { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); }
+        .admin-gradient { background: linear-gradient(135deg, #1a1a1a 0%, #3d3d3d 100%); }
         .no-scrollbar::-webkit-scrollbar { display: none; }
-        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
     </style>
 </head>
-<body class="bg-[#fcfaf9] text-stone-900">
+<body class="bg-[#fdfcfb] text-stone-900">
     <div id="root"></div>
 
     <script type="text/babel">
-        // --- FIREBASE CONFIG ---
+        // --- КОНФІГУРАЦІЯ FIREBASE ---
         const firebaseConfig = {
         apiKey: "AIzaSyDaE80NIYOWs7f9FZ2lxK_6dbocBsrgqmg",
         authDomain: "nail-e8a3c.firebaseapp.com",
@@ -42,13 +38,13 @@
         measurementId: "G-SSVYQB90HH"
         };
 
-        const isConfigEmpty = firebaseConfig.apiKey.includes("ВАШ_");
-
-        if (!isConfigEmpty) {
+        // Перевірка наявності конфігурації
+        const isConfigReady = firebaseConfig.apiKey !== "";
+        if (isConfigReady) {
             firebase.initializeApp(firebaseConfig);
         }
 
-        const { useState, useEffect, useMemo } = React;
+        const { useState, useEffect } = React;
 
         const SERVICES = [
             { id: 1, name: "Естетичний манікюр", price: 500, time: "1.5 год", img: "https://images.unsplash.com/photo-1604654894610-df63bc536371?auto=format&fit=crop&w=400" },
@@ -57,171 +53,151 @@
         ];
 
         const TIME_SLOTS = ["09:00", "11:00", "13:00", "15:00", "17:00", "19:00"];
+        const ADMIN_EMAIL = "admin@nail.com"; // ЗАМІНІТЬ НА ВАШ АДМІН-EMAIL
 
         function App() {
             const [user, setUser] = useState(null);
             const [profile, setProfile] = useState({ instagram: '' });
             const [isAdmin, setIsAdmin] = useState(false);
-            const [view, setView] = useState('home');
+            const [view, setView] = useState('home'); // home, booking, cabinet, admin
             const [appointments, setAppointments] = useState([]);
-            const [blockedSlots, setBlockedSlots] = useState([]); // [{date, time}]
-            const [toast, setToast] = useState(null);
+            const [blockedSlots, setBlockedSlots] = useState([]);
             const [showLogin, setShowLogin] = useState(false);
+            const [loading, setLoading] = useState(true);
 
             useEffect(() => {
-                if (isConfigEmpty) return;
-                const auth = firebase.auth();
-                const db = firebase.firestore();
-
-                const unsubscribe = auth.onAuthStateChanged(async (u) => {
-                    setUser(u);
+                if (!isConfigReady) return;
+                const unsubscribe = firebase.auth().onAuthStateChanged(async (u) => {
                     if (u) {
-                        setIsAdmin(u.email === 'admin@nail.com');
-                        const doc = await db.collection("users").doc(u.uid).get();
+                        setUser(u);
+                        setIsAdmin(u.email === ADMIN_EMAIL);
+                        const doc = await firebase.firestore().collection("users").doc(u.uid).get();
                         if (doc.exists) setProfile(doc.data());
+                    } else {
+                        setUser(null);
+                        setIsAdmin(false);
+                        setProfile({ instagram: '' });
+                        if (view === 'cabinet' || view === 'admin') setView('home');
                     }
+                    setLoading(false);
                 });
                 return () => unsubscribe();
-            }, []);
+            }, [view]);
 
             useEffect(() => {
-                if (!user || isConfigEmpty) return;
+                if (!user || !isConfigReady) return;
                 const db = firebase.firestore();
                 
-                // Слухаємо записи
                 const unsubApps = db.collection("appointments").onSnapshot(snap => {
                     const data = snap.docs.map(d => ({id: d.id, ...d.data()}));
-                    setAppointments(isAdmin ? data : data.filter(a => a.userId === user.uid));
+                    setAppointments(u.email === ADMIN_EMAIL ? data : data.filter(a => a.userId === user.uid));
                 });
 
-                // Слухаємо заблокований розклад
                 const unsubBlocked = db.collection("settings").doc("schedule").onSnapshot(doc => {
                     if (doc.exists) setBlockedSlots(doc.data().blocked || []);
                 });
 
                 return () => { unsubApps(); unsubBlocked(); };
-            }, [user, isAdmin]);
+            }, [user]);
 
-            const showToast = (msg, type = 'success') => {
-                setToast({ msg, type });
-                setTimeout(() => setToast(null), 3000);
-            };
-
-            const updateProfile = async (data) => {
-                try {
-                    await firebase.firestore().collection("users").doc(user.uid).set(data, {merge: true});
-                    setProfile(data);
-                    showToast("Профіль оновлено");
-                } catch (e) { showToast("Помилка профілю", "error"); }
-            };
-
-            const toggleBlockTime = async (date, time) => {
-                if (!isAdmin) return;
-                const isBlocked = blockedSlots.find(b => b.date === date && b.time === time);
-                const newList = isBlocked 
-                    ? blockedSlots.filter(b => !(b.date === date && b.time === time))
-                    : [...blockedSlots, {date, time}];
-                
-                await firebase.firestore().collection("settings").doc("schedule").set({ blocked: newList });
-                showToast(isBlocked ? "Час розблоковано" : "Час закрито для запису");
-            };
-
-            if (isConfigEmpty) return <ConfigError />;
+            if (!isConfigReady) return <ConfigError />;
+            if (loading) return <div className="h-screen flex items-center justify-center font-black animate-pulse">NailArt Pro...</div>;
 
             return (
-                <div className="min-h-screen pb-20 md:pb-0">
-                    {/* Header */}
+                <div className="min-h-screen">
+                    {/* Навігація */}
                     <nav className="sticky top-0 z-50 glass border-b border-stone-100">
                         <div className="max-w-6xl mx-auto px-6 h-20 flex items-center justify-between">
                             <div className="flex items-center gap-3 cursor-pointer" onClick={() => setView('home')}>
-                                <div className="w-10 h-10 bg-pink-500 rounded-full flex items-center justify-center text-white font-bold shadow-lg shadow-pink-200 italic">N</div>
+                                <div className="w-10 h-10 bg-pink-500 rounded-xl flex items-center justify-center text-white font-bold shadow-lg shadow-pink-200">N</div>
                                 <span className="text-xl font-black tracking-tighter uppercase">NailArt <span className="text-pink-500 font-serif lowercase italic font-normal">pro</span></span>
                             </div>
-                            <div className="hidden md:flex items-center gap-8 text-sm font-bold uppercase tracking-widest text-stone-500">
-                                <button onClick={() => setView('home')} className={view==='home'?'text-pink-500':''}>Головна</button>
-                                <button onClick={() => setView('booking')} className={view==='booking'?'text-pink-500':''}>Запис</button>
-                                <button onClick={() => setView('cabinet')} className={view==='cabinet'?'text-pink-500':''}>Кабінет</button>
-                                {isAdmin && <button onClick={() => setView('admin')} className="bg-stone-900 text-white px-4 py-2 rounded-lg">Панель</button>}
+
+                            <div className="hidden md:flex items-center gap-8 text-sm font-bold uppercase tracking-widest">
+                                <button onClick={() => setView('home')} className={view==='home'?'text-pink-500':'text-stone-400'}>Головна</button>
+                                <button onClick={() => setView('booking')} className={view==='booking'?'text-pink-500':'text-stone-400'}>Запис</button>
+                                {user && !isAdmin && <button onClick={() => setView('cabinet')} className={view==='cabinet'?'text-pink-500':'text-stone-400'}>Мій Кабінет</button>}
+                                {isAdmin && <button onClick={() => setView('admin')} className={`px-4 py-2 rounded-lg ${view==='admin'?'bg-pink-500 text-white':'bg-stone-900 text-white'}`}>Управління</button>}
                             </div>
-                            {!user ? (
-                                <button onClick={() => setShowLogin(true)} className="bg-pink-500 text-white px-6 py-2.5 rounded-full font-bold shadow-lg shadow-pink-100 transition hover:bg-pink-600">Вхід</button>
-                            ) : (
-                                <div className="flex items-center gap-4">
-                                    <div className="w-10 h-10 rounded-full bg-stone-100 border flex items-center justify-center overflow-hidden">
-                                        <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user.email}`} alt="avatar" />
+
+                            <div className="flex items-center gap-4">
+                                {!user ? (
+                                    <button onClick={() => setShowLogin(true)} className="bg-pink-500 text-white px-6 py-2.5 rounded-full font-bold shadow-lg shadow-pink-100 transition hover:bg-pink-600">Вхід</button>
+                                ) : (
+                                    <div className="flex items-center gap-3">
+                                        <div className="text-right hidden sm:block">
+                                            <p className="text-[10px] font-black uppercase text-stone-400 leading-none">{isAdmin ? 'Адміністратор' : 'Клієнт'}</p>
+                                            <p className="text-xs font-bold">{user.email.split('@')[0]}</p>
+                                        </div>
+                                        <button onClick={() => firebase.auth().signOut()} className="w-10 h-10 rounded-full bg-stone-100 flex items-center justify-center hover:bg-red-50 hover:text-red-500 transition">
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+                                        </button>
                                     </div>
-                                    <button onClick={() => firebase.auth().signOut()} className="text-stone-300 hover:text-red-500 transition"><i className="fas fa-sign-out-alt"></i></button>
-                                </div>
-                            )}
+                                )}
+                            </div>
                         </div>
                     </nav>
 
-                    {/* Content */}
+                    {/* Контентна частина */}
                     <main className="max-w-6xl mx-auto p-6">
                         {view === 'home' && <HomeView setView={setView} />}
-                        {view === 'booking' && <BookingView user={user} profile={profile} blockedSlots={blockedSlots} onBook={async (data) => {
-                            await firebase.firestore().collection("appointments").add({...data, status: 'pending', createdAt: new Date().toISOString()});
-                            showToast("Чекайте на підтвердження!");
-                            setView('cabinet');
-                        }} onLogin={() => setShowLogin(true)} />}
-                        {view === 'cabinet' && <CabinetView user={user} profile={profile} onUpdateProfile={updateProfile} appointments={appointments} />}
-                        {view === 'admin' && isAdmin && <AdminView appointments={appointments} blockedSlots={blockedSlots} onToggleBlock={toggleBlockTime} onUpdateStatus={(id, s) => firebase.firestore().collection("appointments").doc(id).update({status: s})} />}
+                        {view === 'booking' && (
+                            <BookingView 
+                                user={user} 
+                                profile={profile} 
+                                blockedSlots={blockedSlots} 
+                                onBook={async (data) => {
+                                    await firebase.firestore().collection("appointments").add({...data, status: 'pending', createdAt: new Date().toISOString()});
+                                    setView('cabinet');
+                                }} 
+                                onLogin={() => setShowLogin(true)} 
+                            />
+                        )}
+                        {view === 'cabinet' && user && !isAdmin && (
+                            <CabinetView 
+                                user={user} 
+                                profile={profile} 
+                                appointments={appointments}
+                                onUpdateProfile={async (data) => {
+                                    await firebase.firestore().collection("users").doc(user.uid).set(data, {merge: true});
+                                    setProfile(data);
+                                }}
+                            />
+                        )}
+                        {view === 'admin' && isAdmin && (
+                            <AdminView 
+                                appointments={appointments} 
+                                blockedSlots={blockedSlots} 
+                                onToggleBlock={async (date, time) => {
+                                    const isBlocked = blockedSlots.find(b => b.date === date && b.time === time);
+                                    const newList = isBlocked 
+                                        ? blockedSlots.filter(b => !(b.date === date && b.time === time))
+                                        : [...blockedSlots, {date, time}];
+                                    await firebase.firestore().collection("settings").doc("schedule").set({ blocked: newList });
+                                }} 
+                                onUpdateStatus={(id, s) => firebase.firestore().collection("appointments").doc(id).update({status: s})} 
+                            />
+                        )}
                     </main>
 
-                    {/* Toast & Login */}
-                    {toast && <div className={`fixed bottom-10 right-10 px-6 py-4 rounded-2xl shadow-2xl text-white font-bold z-[100] transition-all transform animate-bounce ${toast.type==='success'?'bg-stone-900':'bg-red-500'}`}>{toast.msg}</div>}
                     {showLogin && <LoginModal onClose={() => setShowLogin(false)} />}
                 </div>
             );
         }
 
-        // --- VIEWS ---
+        // --- КОМПОНЕНТИ ПОДІЛУ ---
 
         function HomeView({ setView }) {
-            const portfolio = [
-                "https://images.unsplash.com/photo-1607779097040-26e80aa78e66?auto=format&fit=crop&w=500",
-                "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&fit=crop&w=500",
-                "https://images.unsplash.com/photo-1632345031435-8727f6897d53?auto=format&fit=crop&w=500",
-                "https://images.unsplash.com/photo-1604654894610-df63bc536371?auto=format&fit=crop&w=500"
-            ];
             return (
-                <div className="space-y-20 py-10">
+                <div className="py-12 space-y-20">
                     <section className="flex flex-col md:flex-row items-center gap-12">
-                        <div className="flex-1 space-y-6">
-                            <span className="bg-pink-100 text-pink-600 px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest">Premium Nails Studio</span>
-                            <h1 className="text-5xl md:text-7xl font-black leading-none">Мистецтво на ваших <span className="text-pink-500 font-serif italic">кінчиках</span> пальців.</h1>
-                            <p className="text-stone-500 text-lg">Забудьте про звичайний манікюр. Ми створюємо стиль, який підкреслює вашу індивідуальність.</p>
-                            <div className="flex gap-4">
-                                <button onClick={() => setView('booking')} className="bg-stone-900 text-white px-10 py-5 rounded-2xl font-bold shadow-xl hover:bg-black transition">Записатись зараз</button>
-                                <div className="flex -space-x-4 items-center pl-4">
-                                    {[1,2,3].map(i => <div key={i} className="w-12 h-12 rounded-full border-4 border-white overflow-hidden bg-stone-200"><img src={`https://i.pravatar.cc/100?u=${i}`} /></div>)}
-                                    <span className="pl-6 text-sm font-bold text-stone-400">500+ задоволених клієнтів</span>
-                                </div>
-                            </div>
+                        <div className="flex-1 space-y-8">
+                            <h1 className="text-6xl font-black leading-tight">Професійний догляд <span className="text-pink-500 font-serif italic">ваших рук</span></h1>
+                            <p className="text-stone-500 text-lg">Записуйтесь онлайн, керуйте візитами та отримуйте найкращий сервіс у нашому особистому кабінеті.</p>
+                            <button onClick={() => setView('booking')} className="bg-stone-900 text-white px-10 py-5 rounded-2xl font-bold shadow-2xl hover:bg-black transition transform hover:-translate-y-1">Записатись на манікюр</button>
                         </div>
-                        <div className="flex-1 relative">
-                            <div className="absolute -inset-4 bg-pink-100 rounded-[3rem] -rotate-3"></div>
-                            <img src="https://images.unsplash.com/photo-1610992015732-2449b0c26670?auto=format&fit=crop&w=800" className="relative rounded-[2.5rem] shadow-2xl w-full object-cover h-[500px]" alt="Hero" />
-                        </div>
-                    </section>
-
-                    <section className="space-y-8">
-                        <div className="flex justify-between items-end">
-                            <div>
-                                <h2 className="text-3xl font-black">Портфоліо робіт</h2>
-                                <p className="text-stone-400">Наші останні творіння</p>
-                            </div>
-                            <button className="text-pink-500 font-bold hover:underline">Більше в Instagram →</button>
-                        </div>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            {portfolio.map((img, i) => (
-                                <div key={i} className="group relative overflow-hidden rounded-3xl aspect-square">
-                                    <img src={img} className="w-full h-full object-cover transition duration-500 group-hover:scale-110" />
-                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
-                                        <span className="text-white font-bold border-2 border-white px-4 py-2 rounded-full">Переглянути</span>
-                                    </div>
-                                </div>
-                            ))}
+                        <div className="flex-1">
+                            <img src="https://images.unsplash.com/photo-1610992015732-2449b0c26670?auto=format&fit=crop&w=800" className="rounded-[3rem] shadow-2xl rotate-2" alt="Nail Art" />
                         </div>
                     </section>
                 </div>
@@ -230,132 +206,101 @@
 
         function BookingView({ user, profile, blockedSlots, onBook, onLogin }) {
             const [step, setStep] = useState(1);
-            const [selectedService, setSelectedService] = useState(null);
-            const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-            const [time, setTime] = useState(null);
-
-            const isAvailable = (t) => !blockedSlots.find(b => b.date === date && b.time === t);
+            const [data, setData] = useState({ service: '', date: '', time: '' });
 
             if (!user) return (
-                <div className="max-w-md mx-auto py-20 text-center space-y-6">
-                    <div className="w-24 h-24 bg-pink-50 rounded-full flex items-center justify-center mx-auto text-4xl text-pink-500">🔒</div>
-                    <h2 className="text-2xl font-bold">Тільки для клієнтів</h2>
-                    <p className="text-stone-400">Увійдіть або зареєструйтесь, щоб отримати доступ до онлайн-бронювання</p>
-                    <button onClick={onLogin} className="bg-pink-500 text-white px-8 py-3 rounded-xl font-bold">Авторизуватись</button>
+                <div className="max-w-md mx-auto py-20 text-center space-y-6 bg-white p-10 rounded-[3rem] shadow-sm">
+                    <div className="text-5xl">🔐</div>
+                    <h2 className="text-2xl font-bold">Увійдіть для запису</h2>
+                    <p className="text-stone-400">Тільки авторизовані клієнти можуть бачити вільні години та бронювати послуги.</p>
+                    <button onClick={onLogin} className="w-full bg-pink-500 text-white py-4 rounded-2xl font-bold">Авторизуватися зараз</button>
                 </div>
             );
 
             return (
-                <div className="max-w-2xl mx-auto bg-white p-8 md:p-12 rounded-[3rem] shadow-sm border border-stone-100">
-                    <div className="flex justify-between items-center mb-10">
-                        {[1, 2, 3].map(i => (
-                            <div key={i} className={`h-1.5 flex-1 rounded-full mx-1 ${step >= i ? 'bg-pink-500' : 'bg-stone-100'}`}></div>
-                        ))}
-                    </div>
-
+                <div className="max-w-xl mx-auto bg-white p-8 md:p-12 rounded-[3rem] shadow-sm border border-stone-100">
                     {step === 1 && (
-                        <div className="space-y-6 animate-in slide-in-from-right-4">
-                            <h2 className="text-3xl font-black">Оберіть послугу</h2>
-                            <div className="grid gap-4">
+                        <div className="space-y-6">
+                            <h2 className="text-2xl font-black">1. Оберіть послугу</h2>
+                            <div className="grid gap-3">
                                 {SERVICES.map(s => (
-                                    <div key={s.id} onClick={() => {setSelectedService(s); setStep(2);}} className="group flex items-center p-4 border-2 border-stone-100 rounded-3xl hover:border-pink-500 hover:bg-pink-50 transition cursor-pointer">
-                                        <img src={s.img} className="w-20 h-20 rounded-2xl object-cover mr-4" />
-                                        <div className="flex-1">
-                                            <h4 className="font-bold text-lg">{s.name}</h4>
-                                            <p className="text-stone-400 text-sm">{s.time}</p>
-                                        </div>
-                                        <div className="text-xl font-black text-pink-500">{s.price} ₴</div>
-                                    </div>
+                                    <button key={s.id} onClick={() => {setData({...data, service: s.name}); setStep(2);}} className="flex items-center p-4 border-2 border-stone-50 rounded-2xl hover:border-pink-500 transition text-left">
+                                        <div className="flex-1 font-bold">{s.name}</div>
+                                        <div className="text-pink-500 font-black">{s.price} ₴</div>
+                                    </button>
                                 ))}
                             </div>
                         </div>
                     )}
 
                     {step === 2 && (
-                        <div className="space-y-8 animate-in slide-in-from-right-4 text-center">
-                            <h2 className="text-3xl font-black text-left">Дата та час</h2>
-                            <input type="date" value={date} min={new Date().toISOString().split('T')[0]} onChange={e => setDate(e.target.value)} className="w-full p-5 bg-stone-50 rounded-2xl border-none outline-none font-bold text-lg focus:ring-2 ring-pink-500" />
-                            <div className="grid grid-cols-3 gap-3">
-                                {TIME_SLOTS.map(t => (
-                                    <button 
-                                        key={t} 
-                                        disabled={!isAvailable(t)}
-                                        onClick={() => setTime(t)}
-                                        className={`p-4 rounded-2xl font-bold transition ${!isAvailable(t) ? 'opacity-20 bg-stone-100 cursor-not-allowed' : time === t ? 'bg-pink-500 text-white scale-105' : 'bg-stone-50 hover:bg-pink-100'}`}
-                                    >
-                                        {t}
-                                    </button>
-                                ))}
+                        <div className="space-y-6">
+                            <h2 className="text-2xl font-black">2. Дата та час</h2>
+                            <input type="date" className="w-full p-4 bg-stone-50 rounded-xl outline-none" min={new Date().toISOString().split('T')[0]} onChange={e => setData({...data, date: e.target.value})} />
+                            <div className="grid grid-cols-3 gap-2">
+                                {TIME_SLOTS.map(t => {
+                                    const isBlocked = blockedSlots.find(b => b.date === data.date && b.time === t);
+                                    return (
+                                        <button key={t} disabled={isBlocked} onClick={() => setData({...data, time: t})} className={`p-3 rounded-xl font-bold text-sm ${isBlocked ? 'bg-stone-100 text-stone-300' : data.time === t ? 'bg-pink-500 text-white' : 'bg-stone-50'}`}>
+                                            {t}
+                                        </button>
+                                    );
+                                })}
                             </div>
-                            <div className="flex gap-4">
-                                <button onClick={() => setStep(1)} className="flex-1 py-4 font-bold text-stone-400">Назад</button>
-                                <button disabled={!time} onClick={() => setStep(3)} className="flex-[2] bg-stone-900 text-white py-4 rounded-2xl font-bold disabled:opacity-20">Далі</button>
+                            <div className="flex gap-4 pt-4">
+                                <button onClick={() => setStep(1)} className="flex-1 font-bold text-stone-400">Назад</button>
+                                <button disabled={!data.time || !data.date} onClick={() => setStep(3)} className="flex-[2] bg-stone-900 text-white py-4 rounded-xl font-bold disabled:opacity-20">Підтвердити</button>
                             </div>
                         </div>
                     )}
 
                     {step === 3 && (
-                        <div className="space-y-8 animate-in zoom-in-95 text-center">
-                            <div className="w-20 h-20 bg-green-50 text-green-500 rounded-full flex items-center justify-center mx-auto text-3xl">✓</div>
-                            <h2 className="text-3xl font-black">Підтвердження</h2>
-                            <div className="bg-stone-50 p-8 rounded-[2rem] text-left space-y-4">
-                                <div className="flex justify-between border-b pb-4"><span>Послуга:</span><span className="font-bold">{selectedService?.name}</span></div>
-                                <div className="flex justify-between border-b pb-4"><span>Дата:</span><span className="font-bold">{date} о {time}</span></div>
-                                <div className="flex justify-between"><span>Instagram:</span><span className="font-bold text-pink-500">@{profile.instagram || 'не вказано'}</span></div>
+                        <div className="space-y-6 text-center">
+                            <div className="w-16 h-16 bg-green-50 text-green-500 rounded-full flex items-center justify-center mx-auto text-2xl">✓</div>
+                            <h2 className="text-2xl font-black">Перевірте дані</h2>
+                            <div className="bg-stone-50 p-6 rounded-2xl text-left space-y-2">
+                                <p>Послуга: <b>{data.service}</b></p>
+                                <p>Час: <b>{data.date} о {data.time}</b></p>
+                                <p>Instagram: <b className="text-pink-500">@{profile.instagram || 'не вказано'}</b></p>
                             </div>
-                            <p className="text-xs text-stone-400 italic">* Після підтвердження запис з'явиться у вашому кабінеті зі статусом "Очікує".</p>
-                            <button onClick={() => onBook({service: selectedService.name, date, time, instagram: profile.instagram, userId: user.uid, userEmail: user.email})} className="w-full bg-pink-500 text-white py-5 rounded-2xl font-bold text-xl shadow-xl shadow-pink-100">Бронюю візит</button>
-                            <button onClick={() => setStep(2)} className="text-stone-400 font-bold">Редагувати дані</button>
+                            <button onClick={() => onBook({...data, instagram: profile.instagram, userId: user.uid, userEmail: user.email})} className="w-full bg-pink-500 text-white py-4 rounded-2xl font-bold">Бронюю</button>
                         </div>
                     )}
                 </div>
             );
         }
 
-        function CabinetView({ user, profile, onUpdateProfile, appointments }) {
+        function CabinetView({ user, profile, appointments, onUpdateProfile }) {
             const [ig, setIg] = useState(profile.instagram || '');
             return (
-                <div className="grid md:grid-cols-3 gap-10 py-10">
-                    <div className="md:col-span-1 space-y-8">
-                        <div className="bg-white p-8 rounded-[2.5rem] border border-stone-100 shadow-sm text-center space-y-6">
-                            <div className="w-32 h-32 mx-auto rounded-full bg-gradient-to-tr from-pink-500 to-purple-500 p-1">
-                                <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user.email}`} className="bg-white rounded-full p-2" />
-                            </div>
-                            <div>
-                                <h3 className="text-xl font-bold">{user.email.split('@')[0]}</h3>
-                                <p className="text-stone-400 text-sm">{user.email}</p>
-                            </div>
-                            <div className="space-y-3 pt-4 text-left">
-                                <label className="text-xs font-black uppercase text-stone-400 ml-2">Мій Instagram</label>
-                                <div className="relative">
-                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-300 font-bold">@</span>
-                                    <input value={ig} onChange={e => setIg(e.target.value)} className="w-full pl-10 pr-4 py-4 bg-stone-50 rounded-2xl border-none outline-none focus:ring-2 ring-pink-500 font-bold" />
-                                </div>
-                                <button onClick={() => onUpdateProfile({ instagram: ig })} className="w-full bg-stone-900 text-white py-3 rounded-xl text-sm font-bold">Зберегти профіль</button>
+                <div className="grid md:grid-cols-3 gap-8 py-8">
+                    <div className="space-y-6">
+                        <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-stone-100 text-center">
+                            <div className="w-24 h-24 bg-pink-100 rounded-full mx-auto mb-4 flex items-center justify-center text-3xl">👩</div>
+                            <h3 className="font-black">{user.email}</h3>
+                            <div className="mt-6 text-left space-y-4">
+                                <label className="text-[10px] font-black uppercase text-stone-400">Мій Instagram</label>
+                                <input value={ig} onChange={e => setIg(e.target.value)} placeholder="@your_nik" className="w-full p-4 bg-stone-50 rounded-xl outline-none focus:ring-2 ring-pink-500" />
+                                <button onClick={() => onUpdateProfile({instagram: ig})} className="w-full bg-stone-900 text-white py-3 rounded-xl font-bold">Оновити профіль</button>
                             </div>
                         </div>
                     </div>
-                    <div className="md:col-span-2 space-y-6">
-                        <h2 className="text-3xl font-black">Історія візитів</h2>
+                    <div className="md:col-span-2 space-y-4">
+                        <h2 className="text-2xl font-black">Мої записи</h2>
                         {appointments.length === 0 ? (
-                            <div className="h-64 flex items-center justify-center border-2 border-dashed border-stone-200 rounded-[2.5rem] text-stone-400 font-medium">Тут з'являться ваші записи</div>
+                            <div className="p-20 text-center text-stone-300 font-bold border-2 border-dashed rounded-[2rem]">Поки що немає записів</div>
                         ) : (
-                            <div className="space-y-4">
-                                {appointments.map(a => (
-                                    <div key={a.id} className="bg-white p-6 rounded-3xl border border-stone-50 shadow-sm flex justify-between items-center group hover:border-pink-200 transition">
-                                        <div className="flex gap-4 items-center">
-                                            <div className={`w-3 h-3 rounded-full ${a.status==='confirmed'?'bg-green-500':'bg-yellow-400'}`}></div>
-                                            <div>
-                                                <div className="font-bold text-lg">{a.service}</div>
-                                                <div className="text-stone-400 text-sm">{a.date} о {a.time}</div>
-                                            </div>
-                                        </div>
-                                        <div className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider ${a.status==='confirmed'?'bg-green-50 text-green-600':'bg-yellow-50 text-yellow-600'}`}>
-                                            {a.status === 'confirmed' ? 'Підтверджено' : 'Обробка'}
-                                        </div>
+                            appointments.map(a => (
+                                <div key={a.id} className="bg-white p-6 rounded-2xl border flex justify-between items-center">
+                                    <div>
+                                        <div className="font-black text-lg">{a.service}</div>
+                                        <div className="text-stone-400">{a.date} о {a.time}</div>
                                     </div>
-                                ))}
-                            </div>
+                                    <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase ${a.status==='confirmed'?'bg-green-100 text-green-600':'bg-yellow-100 text-yellow-600'}`}>
+                                        {a.status==='confirmed' ? 'Підтверджено' : 'В обробці'}
+                                    </span>
+                                </div>
+                            ))
                         )}
                     </div>
                 </div>
@@ -363,101 +308,66 @@
         }
 
         function AdminView({ appointments, blockedSlots, onToggleBlock, onUpdateStatus }) {
-            const [tab, setTab] = useState('calendar');
-            const dates = Array.from({length: 14}, (_, i) => {
+            const [tab, setTab] = useState('requests');
+            const dates = Array.from({length: 7}, (_, i) => {
                 const d = new Date();
                 d.setDate(d.getDate() + i);
                 return d.toISOString().split('T')[0];
             });
 
             return (
-                <div className="space-y-8 py-10">
-                    <div className="flex flex-col md:flex-row justify-between items-center gap-6">
-                        <h2 className="text-4xl font-black text-purple-900">Admin Control</h2>
-                        <div className="flex bg-stone-100 p-1.5 rounded-2xl">
-                            <button onClick={() => setTab('calendar')} className={`px-6 py-2.5 rounded-xl text-sm font-bold transition ${tab==='calendar'?'bg-white shadow-sm text-purple-600':'text-stone-400'}`}>Календар</button>
-                            <button onClick={() => setTab('schedule')} className={`px-6 py-2.5 rounded-xl text-sm font-bold transition ${tab==='schedule'?'bg-white shadow-sm text-purple-600':'text-stone-400'}`}>Розклад</button>
-                            <button onClick={() => setTab('requests')} className={`px-6 py-2.5 rounded-xl text-sm font-bold transition ${tab==='requests'?'bg-white shadow-sm text-purple-600':'text-stone-400'}`}>Запити ({appointments.filter(a=>a.status==='pending').length})</button>
+                <div className="py-8 space-y-8">
+                    <div className="flex justify-between items-center">
+                        <h2 className="text-3xl font-black">Панель Адміністратора</h2>
+                        <div className="bg-stone-100 p-1 rounded-xl flex gap-1">
+                            {['requests', 'schedule'].map(t => (
+                                <button key={t} onClick={() => setTab(t)} className={`px-5 py-2 rounded-lg text-xs font-black uppercase ${tab===t?'bg-white shadow-sm':'text-stone-400'}`}>
+                                    {t === 'requests' ? 'Запити' : 'Графік'}
+                                </button>
+                            ))}
                         </div>
                     </div>
 
-                    {tab === 'calendar' && (
-                        <div className="grid md:grid-cols-2 gap-6 animate-in fade-in">
-                            {dates.map(date => {
-                                const dayApps = appointments.filter(a => a.date === date && a.status === 'confirmed');
-                                return (
-                                    <div key={date} className="bg-white p-6 rounded-[2rem] border shadow-sm">
-                                        <div className="flex justify-between mb-4">
-                                            <span className="font-black text-stone-400 uppercase tracking-tighter text-sm">{new Date(date).toLocaleDateString('uk-UA', {weekday: 'long', day: 'numeric', month: 'short'})}</span>
-                                            <span className="bg-purple-100 text-purple-700 text-[10px] font-black px-2 py-1 rounded uppercase">{dayApps.length} записів</span>
+                    {tab === 'requests' && (
+                        <div className="space-y-4">
+                            {appointments.filter(a => a.status === 'pending').map(a => (
+                                <div key={a.id} className="bg-white p-6 rounded-3xl border shadow-sm flex flex-col md:flex-row justify-between items-center gap-4">
+                                    <div className="flex-1">
+                                        <div className="flex items-center gap-3">
+                                            <span className="font-black text-xl">{a.service}</span>
+                                            <span className="bg-pink-100 text-pink-500 text-[10px] px-2 py-0.5 rounded font-black uppercase">@{a.instagram}</span>
                                         </div>
-                                        <div className="space-y-3">
-                                            {TIME_SLOTS.map(t => {
-                                                const app = dayApps.find(a => a.time === t);
-                                                return (
-                                                    <div key={t} className={`p-3 rounded-xl border flex justify-between items-center ${app ? 'bg-purple-50 border-purple-100' : 'bg-stone-50 border-stone-100 opacity-40'}`}>
-                                                        <span className="font-bold text-xs">{t}</span>
-                                                        {app ? (
-                                                            <div className="text-right">
-                                                                <div className="text-xs font-black">@{app.instagram || 'anon'}</div>
-                                                                <div className="text-[10px] text-stone-500">{app.service}</div>
-                                                            </div>
-                                                        ) : <span className="text-[10px] uppercase font-bold text-stone-300">вільно</span>}
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
+                                        <p className="text-stone-400 font-bold">{a.date} о {a.time} • {a.userEmail}</p>
                                     </div>
-                                );
-                            })}
+                                    <div className="flex gap-2">
+                                        <button onClick={() => onUpdateStatus(a.id, 'confirmed')} className="bg-green-500 text-white px-6 py-3 rounded-xl font-bold">Прийняти</button>
+                                        <button onClick={() => onUpdateStatus(a.id, 'rejected')} className="bg-stone-100 text-red-500 px-6 py-3 rounded-xl font-bold">Відхилити</button>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     )}
 
                     {tab === 'schedule' && (
-                        <div className="bg-white rounded-[2.5rem] border shadow-sm overflow-hidden p-8 animate-in slide-in-from-bottom-4">
-                            <h3 className="text-xl font-bold mb-6">Управління доступністю</h3>
-                            <p className="text-stone-400 text-sm mb-10 italic">Натисніть на слот, щоб закрити його для клієнтів (наприклад, для відпустки чи перерви)</p>
-                            <div className="overflow-x-auto no-scrollbar">
-                                <div className="min-w-[800px] flex gap-4">
-                                    {dates.slice(0, 7).map(date => (
-                                        <div key={date} className="flex-1 space-y-2">
-                                            <div className="text-center font-black text-[10px] uppercase mb-4 h-10 flex flex-col items-center">
-                                                <span>{new Date(date).toLocaleDateString('uk-UA', {day: 'numeric'})}</span>
-                                                <span className="text-purple-400">{new Date(date).toLocaleDateString('uk-UA', {weekday: 'short'})}</span>
-                                            </div>
-                                            {TIME_SLOTS.map(t => {
-                                                const isBlocked = blockedSlots.find(b => b.date === date && b.time === t);
-                                                return (
-                                                    <button key={t} onClick={() => onToggleBlock(date, t)} className={`w-full p-4 rounded-2xl text-[10px] font-black transition ${isBlocked ? 'bg-red-500 text-white' : 'bg-stone-50 hover:bg-stone-200 text-stone-400'}`}>
-                                                        {isBlocked ? 'ЗАКРИТО' : t}
-                                                    </button>
-                                                );
-                                            })}
+                        <div className="bg-white p-8 rounded-[3rem] border shadow-sm overflow-x-auto">
+                            <div className="min-w-[700px] flex gap-4">
+                                {dates.map(date => (
+                                    <div key={date} className="flex-1 space-y-2">
+                                        <div className="text-center mb-4">
+                                            <p className="text-[10px] font-black text-stone-300 uppercase leading-none">{new Date(date).toLocaleDateString('uk-UA', {weekday: 'short'})}</p>
+                                            <p className="font-black text-lg">{new Date(date).getDate()}</p>
                                         </div>
-                                    ))}
-                                </div>
+                                        {TIME_SLOTS.map(t => {
+                                            const isBlocked = blockedSlots.find(b => b.date === date && b.time === t);
+                                            return (
+                                                <button key={t} onClick={() => onToggleBlock(date, t)} className={`w-full p-3 rounded-xl text-[10px] font-black transition ${isBlocked ? 'bg-red-500 text-white' : 'bg-stone-50 text-stone-400 hover:bg-stone-200'}`}>
+                                                    {isBlocked ? 'ЗАКРИТО' : t}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                ))}
                             </div>
-                        </div>
-                    )}
-
-                    {tab === 'requests' && (
-                        <div className="space-y-4 animate-in fade-in">
-                            {appointments.filter(a => a.status === 'pending').map(a => (
-                                <div key={a.id} className="bg-white p-8 rounded-[2.5rem] border shadow-md flex flex-col md:flex-row justify-between items-center gap-6">
-                                    <div className="flex gap-6 items-center w-full md:w-auto">
-                                        <div className="w-16 h-16 bg-stone-100 rounded-full flex items-center justify-center font-bold text-stone-300 uppercase">{a.userEmail[0]}</div>
-                                        <div>
-                                            <div className="font-black text-xl">{a.service}</div>
-                                            <div className="text-stone-500 font-bold">{a.date} о {a.time}</div>
-                                            <div className="text-pink-500 font-bold text-sm">Instagram: @{a.instagram || 'немає'}</div>
-                                        </div>
-                                    </div>
-                                    <div className="flex gap-4 w-full md:w-auto">
-                                        <button onClick={() => onUpdateStatus(a.id, 'confirmed')} className="flex-1 md:flex-none bg-green-500 text-white px-8 py-4 rounded-2xl font-black shadow-lg shadow-green-100 hover:bg-green-600 transition">Прийняти</button>
-                                        <button onClick={() => onUpdateStatus(a.id, 'rejected')} className="flex-1 md:flex-none bg-white border-2 text-red-500 px-8 py-4 rounded-2xl font-black hover:bg-red-50 transition">Відхилити</button>
-                                    </div>
-                                </div>
-                            ))}
                         </div>
                     )}
                 </div>
@@ -469,30 +379,26 @@
             const [email, setEmail] = useState('');
             const [pass, setPass] = useState('');
 
-            const submit = async (e) => {
+            const handleAuth = async (e) => {
                 e.preventDefault();
                 try {
                     if (isReg) await firebase.auth().createUserWithEmailAndPassword(email, pass);
                     else await firebase.auth().signInWithEmailAndPassword(email, pass);
                     onClose();
-                } catch (e) { alert(e.message); }
+                } catch (e) { alert("Помилка: " + e.message); }
             };
 
             return (
-                <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-xl flex items-center justify-center p-6 z-[200]">
-                    <div className="bg-white w-full max-w-sm rounded-[3rem] p-10 shadow-2xl animate-in zoom-in-95">
-                        <div className="flex justify-between items-center mb-10">
-                            <h2 className="text-3xl font-black">{isReg ? 'Приєднуйся' : 'Вітаємо'}</h2>
-                            <button onClick={onClose} className="text-stone-300 hover:text-stone-900">✕</button>
-                        </div>
-                        <form className="space-y-4" onSubmit={submit}>
-                            <input placeholder="Email" required className="w-full p-5 bg-stone-50 rounded-2xl outline-none focus:ring-2 ring-pink-500 font-bold" value={email} onChange={e => setEmail(e.target.value)} />
-                            <input type="password" placeholder="Пароль" required className="w-full p-5 bg-stone-50 rounded-2xl outline-none focus:ring-2 ring-pink-500 font-bold" value={pass} onChange={e => setPass(e.target.value)} />
-                            <button className="w-full bg-pink-500 text-white py-5 rounded-2xl font-bold shadow-xl shadow-pink-100 mt-4">{isReg ? 'Створити акаунт' : 'Увійти'}</button>
+                <div className="fixed inset-0 bg-stone-900/40 backdrop-blur-md z-[100] flex items-center justify-center p-6">
+                    <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-10 shadow-2xl relative">
+                        <button onClick={onClose} className="absolute top-6 right-6 text-stone-300">✕</button>
+                        <h2 className="text-3xl font-black mb-8">{isReg ? 'Реєстрація' : 'Вхід'}</h2>
+                        <form className="space-y-4" onSubmit={handleAuth}>
+                            <input type="email" placeholder="Email" required className="w-full p-4 bg-stone-50 rounded-xl outline-none border focus:border-pink-500" value={email} onChange={e => setEmail(e.target.value)} />
+                            <input type="password" placeholder="Пароль" required className="w-full p-4 bg-stone-50 rounded-xl outline-none border focus:border-pink-500" value={pass} onChange={e => setPass(e.target.value)} />
+                            <button className="w-full bg-pink-500 text-white py-4 rounded-xl font-bold shadow-lg shadow-pink-100">{isReg ? 'Створити акаунт' : 'Увійти'}</button>
                         </form>
-                        <button onClick={() => setIsReg(!isReg)} className="w-full mt-6 text-xs text-stone-400 font-black uppercase tracking-widest hover:text-pink-500">
-                            {isReg ? 'Вже маю акаунт' : 'Немає акаунту? Реєстрація'}
-                        </button>
+                        <button onClick={() => setIsReg(!isReg)} className="w-full mt-6 text-xs font-black text-stone-400 uppercase tracking-widest">{isReg ? 'Вже є акаунт? Увійти' : 'Немає акаунту? Реєстрація'}</button>
                     </div>
                 </div>
             );
@@ -500,11 +406,11 @@
 
         function ConfigError() {
             return (
-                <div className="min-h-screen flex items-center justify-center p-6 text-center">
-                    <div className="bg-white p-12 rounded-[3rem] shadow-xl max-w-md border border-red-50">
-                        <div className="w-20 h-20 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-6 text-3xl">!</div>
-                        <h1 className="text-2xl font-black mb-4">Firebase не підключено</h1>
-                        <p className="text-stone-500 mb-8">Будь ласка, вставте ваші <b>firebaseConfig</b> ключі у коді, щоб запустити систему.</p>
+                <div className="h-screen flex items-center justify-center text-center p-10">
+                    <div className="max-w-md bg-white p-10 rounded-[2rem] shadow-xl border border-red-100">
+                        <div className="text-4xl mb-4">⚙️</div>
+                        <h1 className="text-xl font-black mb-2">Налаштуйте Firebase</h1>
+                        <p className="text-stone-400 text-sm">Щоб сайт запрацював, будь ласка, додайте свої ключі <b>firebaseConfig</b> у вихідний код файлу.</p>
                     </div>
                 </div>
             );
