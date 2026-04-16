@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NailArt Studio - Система бронювання</title>
+    
+    <!-- Tailwind CSS для стилізації -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React та Babel для запуску JSX у браузері -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Playfair+Display:wght@700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .font-serif { font-family: 'Playfair Display', serif; }
+    </style>
+</head>
+<body class="bg-stone-50">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+
+        // --- Імітація конфігурації (в локальному середовищі замість глобальних змінних Canvas) ---
+        // Якщо у вас є власний Firebase, замініть ці значення
+        const firebaseConfig = {
+            apiKey: "", 
+            authDomain: "your-app.firebaseapp.com",
+            projectId: "your-app",
+            storageBucket: "your-app.appspot.com",
+            messagingSenderId: "123",
+            appId: "1:123:web:abc"
+        };
+
+        // Mock Firebase Services (Для демонстрації в VS Code без реального Firebase)
+        // В реальному проєкті тут мають бути імпорти: import { initializeApp } from 'firebase/app';
+        const ADMIN_EMAIL = 'admin@nail.com';
+        const STATUSES = { PENDING: 'pending', CONFIRMED: 'confirmed', CANCELLED: 'cancelled', REJECTED: 'rejected' };
+        const WORKING_HOURS = Array.from({ length: 11 }, (_, i) => `${i + 9}:00`);
+        const DEFAULT_SERVICES = [
+            { id: '1', name: 'Класичний манікюр', duration: 60, price: 400 },
+            { id: '2', name: 'Гель-лак (однотонний)', duration: 90, price: 600 },
+            { id: '3', name: 'Нарощування', duration: 150, price: 900 },
+            { id: '4', name: 'Дизайн нігтів', duration: 30, price: 150 },
+        ];
+
+        // --- UI Компоненти іконок (заміна lucide-react для чистого JS) ---
+        const Icon = ({ name, size = 20, className = "" }) => {
+            return <i data-lucide={name} style={{ width: size, height: size }} className={className}></i>;
+        };
+
+        // --- ОСНОВНИЙ ДОДАТОК ---
+        function App() {
+            const [user, setUser] = useState(null);
+            const [isAdmin, setIsAdmin] = useState(false);
+            const [view, setView] = useState('home');
+            const [services, setServices] = useState(DEFAULT_SERVICES);
+            const [appointments, setAppointments] = useState([]);
+            const [loading, setLoading] = useState(false);
+            const [toast, setToast] = useState(null);
+            const [showLoginModal, setShowLoginModal] = useState(false);
+
+            useEffect(() => {
+                lucide.createIcons();
+            }, [view, showLoginModal]);
+
+            const showToast = (message, type = 'success') => {
+                setToast({ message, type });
+                setTimeout(() => setToast(null), 3000);
+            };
+
+            const handleLogin = (email, password) => {
+                // Імітація логіну для VS Code
+                const mockUser = { uid: 'user123', email: email };
+                setUser(mockUser);
+                setIsAdmin(email === ADMIN_EMAIL);
+                setShowLoginModal(false);
+                showToast(`Вітаємо, ${email}!`);
+            };
+
+            const handleSignOut = () => {
+                setUser(null);
+                setIsAdmin(false);
+                setView('home');
+                showToast('Ви вийшли з системи');
+            };
+
+            const addAppointment = (data) => {
+                const newApp = { id: Date.now().toString(), ...data, status: STATUSES.PENDING };
+                setAppointments([...appointments, newApp]);
+                showToast('Запис створено!');
+                setView('cabinet');
+            };
+
+            return (
+                <div className="min-h-screen">
+                    <nav className="bg-white border-b sticky top-0 z-40">
+                        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+                            <div className="text-2xl font-serif font-bold text-pink-600 cursor-pointer flex items-center gap-2" onClick={() => setView('home')}>
+                                <div className="w-8 h-8 bg-pink-500 rounded-full flex items-center justify-center text-white text-xs">NL</div>
+                                NailArt Studio
+                            </div>
+                            <div className="hidden md:flex items-center space-x-6">
+                                <button onClick={() => setView('home')} className="hover:text-pink-500 transition font-medium">Головна</button>
+                                <button onClick={() => setView('booking')} className="hover:text-pink-500 transition font-medium">Записатись</button>
+                                <button onClick={() => setView('cabinet')} className="hover:text-pink-500 transition font-medium">Кабінет</button>
+                                {isAdmin && (
+                                    <button onClick={() => setView('admin')} className="text-purple-600 font-bold flex items-center gap-1 border-l pl-6">
+                                        Адмін
+                                    </button>
+                                )}
+                                {!user ? (
+                                    <button onClick={() => setShowLoginModal(true)} className="bg-stone-900 text-white px-4 py-2 rounded-xl text-sm font-bold">Вхід</button>
+                                ) : (
+                                    <button onClick={handleSignOut} className="text-stone-400 hover:text-red-500">Вихід</button>
+                                )}
+                            </div>
+                        </div>
+                    </nav>
+
+                    <main className="max-w-6xl mx-auto p-4 md:p-8">
+                        {view === 'home' && <HomeView onStart={() => setView('booking')} />}
+                        {view === 'booking' && <BookingView services={services} appointments={appointments} user={user} onComplete={addAppointment} requireLogin={() => setShowLoginModal(true)} />}
+                        {view === 'cabinet' && <CabinetView appointments={appointments} user={user} requireLogin={() => setShowLoginModal(true)} />}
+                        {view === 'admin' && (isAdmin ? <AdminView appointments={appointments} setAppointments={setAppointments} /> : <HomeView onStart={() => setView('booking')} />)}
+                    </main>
+
+                    {showLoginModal && <LoginModal onClose={() => setShowLoginModal(false)} onLogin={handleLogin} />}
+                    {toast && (
+                        <div className={`fixed bottom-4 right-4 p-4 rounded-lg shadow-lg z-50 ${toast.type === 'success' ? 'bg-green-500' : 'bg-red-500'} text-white`}>
+                            {toast.message}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        function HomeView({ onStart }) {
+            return (
+                <div className="flex flex-col items-center justify-center text-center space-y-8 py-12">
+                    <h1 className="text-5xl md:text-7xl font-serif font-bold">Твій ідеальний <br /> <span className="text-pink-500">манікюр</span></h1>
+                    <p className="text-xl text-stone-600 max-w-2xl">Студія краси, де кожен дотик дарує впевненість.</p>
+                    <button onClick={onStart} className="px-10 py-4 bg-pink-500 text-white rounded-full font-bold text-lg hover:bg-pink-600 transition-all shadow-xl shadow-pink-200">
+                        Записатися зараз
+                    </button>
+                </div>
+            );
+        }
+
+        function BookingView({ services, appointments, user, onComplete, requireLogin }) {
+            const [step, setStep] = useState(1);
+            const [selectedService, setSelectedService] = useState(null);
+            const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+            const [selectedTime, setSelectedTime] = useState(null);
+
+            if (!user) return (
+                <div className="text-center py-20 bg-white rounded-3xl border">
+                    <h3 className="text-xl font-bold mb-4">Увійдіть, щоб записатись</h3>
+                    <button onClick={requireLogin} className="bg-pink-500 text-white px-8 py-3 rounded-xl font-bold">Увійти</button>
+                </div>
+            );
+
+            return (
+                <div className="max-w-xl mx-auto bg-white p-8 rounded-3xl shadow-sm border">
+                    {step === 1 ? (
+                        <div className="space-y-6">
+                            <h2 className="text-2xl font-bold">Оберіть послугу</h2>
+                            <div className="space-y-3">
+                                {services.map(s => (
+                                    <div key={s.id} onClick={() => setSelectedService(s)} className={`p-4 border-2 rounded-2xl cursor-pointer ${selectedService?.id === s.id ? 'border-pink-500 bg-pink-50' : 'border-stone-100'}`}>
+                                        <div className="font-bold">{s.name}</div>
+                                        <div className="text-sm text-stone-500">{s.price} грн</div>
+                                    </div>
+                                ))}
+                            </div>
+                            <button disabled={!selectedService} onClick={() => setStep(2)} className="w-full py-4 bg-stone-900 text-white rounded-xl font-bold disabled:opacity-50">Далі</button>
+                        </div>
+                    ) : (
+                        <div className="space-y-6">
+                            <h2 className="text-2xl font-bold">Дата та час</h2>
+                            <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-full p-4 border rounded-xl" />
+                            <div className="grid grid-cols-3 gap-2">
+                                {WORKING_HOURS.map(t => (
+                                    <button key={t} onClick={() => setSelectedTime(t)} className={`p-3 rounded-xl border-2 ${selectedTime === t ? 'bg-pink-500 text-white border-pink-500' : 'border-stone-50'}`}>{t}</button>
+                                ))}
+                            </div>
+                            <button onClick={() => onComplete({ service: selectedService.name, date: selectedDate, time: selectedTime, userId: user.uid })} className="w-full py-4 bg-pink-500 text-white rounded-xl font-bold">Підтвердити</button>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        function CabinetView({ appointments, user, requireLogin }) {
+            if (!user) return <div className="text-center py-20">Будь ласка, увійдіть.</div>;
+            const myApps = appointments.filter(a => a.userId === user.uid);
+            return (
+                <div className="space-y-6">
+                    <h2 className="text-3xl font-bold">Мої візити</h2>
+                    {myApps.length === 0 ? <p>Записів немає</p> : myApps.map(app => (
+                        <div key={app.id} className="bg-white p-6 rounded-2xl border flex justify-between items-center">
+                            <div><div className="font-bold">{app.service}</div><div className="text-stone-500">{app.date} о {app.time}</div></div>
+                            <div className="px-4 py-1 rounded-full text-xs font-bold bg-yellow-100 text-yellow-700 uppercase">{app.status}</div>
+                        </div>
+                    ))}
+                </div>
+            );
+        }
+
+        function AdminView({ appointments, setAppointments }) {
+            const updateStatus = (id, status) => {
+                setAppointments(appointments.map(a => a.id === id ? {...a, status} : a));
+            };
+            return (
+                <div className="space-y-6">
+                    <h2 className="text-3xl font-bold text-purple-700">Панель майстра</h2>
+                    {appointments.map(app => (
+                        <div key={app.id} className="bg-white p-5 rounded-2xl border flex justify-between items-center">
+                            <div><div className="font-bold">{app.service}</div><div className="text-sm text-stone-500">{app.date} • {app.time}</div></div>
+                            <div className="flex gap-2">
+                                <button onClick={() => updateStatus(app.id, STATUSES.CONFIRMED)} className="bg-green-500 text-white px-4 py-2 rounded-lg text-sm">Прийняти</button>
+                                <button onClick={() => updateStatus(app.id, STATUSES.REJECTED)} className="bg-red-500 text-white px-4 py-2 rounded-lg text-sm">Відхилити</button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            );
+        }
+
+        function LoginModal({ onClose, onLogin }) {
+            const [email, setEmail] = useState('');
+            const [pass, setPass] = useState('');
+            return (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+                    <div className="bg-white rounded-3xl p-8 max-w-md w-full">
+                        <h2 className="text-2xl font-bold mb-6">Вхід</h2>
+                        <input type="email" placeholder="Email" className="w-full p-3 border rounded-xl mb-4" value={email} onChange={e => setEmail(e.target.value)} />
+                        <input type="password" placeholder="Пароль" className="w-full p-3 border rounded-xl mb-6" value={pass} onChange={e => setPass(e.target.value)} />
+                        <button onClick={() => onLogin(email, pass)} className="w-full py-4 bg-pink-500 text-white rounded-xl font-bold">Увійти</button>
+                        <button onClick={onClose} className="w-full mt-2 text-stone-400 text-sm">Скасувати</button>
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
