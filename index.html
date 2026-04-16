@@ -90,8 +90,9 @@
                 
                 const unsubApps = db.collection("appointments").onSnapshot(snap => {
                     const data = snap.docs.map(d => ({id: d.id, ...d.data()}));
-                    setAppointments(u.email === ADMIN_EMAIL ? data : data.filter(a => a.userId === user.uid));
-                });
+                    // Виправлено: використовуємо user замість невідомої u
+                    setAppointments(user.email === ADMIN_EMAIL ? data : data.filter(a => a.userId === user.uid));
+                }, err => console.error("Firestore error:", err));
 
                 const unsubBlocked = db.collection("settings").doc("schedule").onSnapshot(doc => {
                     if (doc.exists) setBlockedSlots(doc.data().blocked || []);
@@ -277,11 +278,11 @@
                     <div className="space-y-6">
                         <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-stone-100 text-center">
                             <div className="w-24 h-24 bg-pink-100 rounded-full mx-auto mb-4 flex items-center justify-center text-3xl">👩</div>
-                            <h3 className="font-black">{user.email}</h3>
+                            <h3 className="font-black truncate px-2">{user.email}</h3>
                             <div className="mt-6 text-left space-y-4">
                                 <label className="text-[10px] font-black uppercase text-stone-400">Мій Instagram</label>
                                 <input value={ig} onChange={e => setIg(e.target.value)} placeholder="@your_nik" className="w-full p-4 bg-stone-50 rounded-xl outline-none focus:ring-2 ring-pink-500" />
-                                <button onClick={() => onUpdateProfile({instagram: ig})} className="w-full bg-stone-900 text-white py-3 rounded-xl font-bold">Оновити профіль</button>
+                                <button onClick={() => onUpdateProfile({instagram: ig})} className="w-full bg-stone-900 text-white py-3 rounded-xl font-bold transition hover:bg-black">Оновити профіль</button>
                             </div>
                         </div>
                     </div>
@@ -291,13 +292,13 @@
                             <div className="p-20 text-center text-stone-300 font-bold border-2 border-dashed rounded-[2rem]">Поки що немає записів</div>
                         ) : (
                             appointments.map(a => (
-                                <div key={a.id} className="bg-white p-6 rounded-2xl border flex justify-between items-center">
+                                <div key={a.id} className="bg-white p-6 rounded-2xl border flex justify-between items-center shadow-sm">
                                     <div>
                                         <div className="font-black text-lg">{a.service}</div>
                                         <div className="text-stone-400">{a.date} о {a.time}</div>
                                     </div>
-                                    <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase ${a.status==='confirmed'?'bg-green-100 text-green-600':'bg-yellow-100 text-yellow-600'}`}>
-                                        {a.status==='confirmed' ? 'Підтверджено' : 'В обробці'}
+                                    <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase ${a.status==='confirmed'?'bg-green-100 text-green-600':a.status==='rejected'?'bg-red-100 text-red-600':'bg-yellow-100 text-yellow-600'}`}>
+                                        {a.status==='confirmed' ? 'Підтверджено' : a.status==='rejected' ? 'Відхилено' : 'В обробці'}
                                     </span>
                                 </div>
                             ))
@@ -321,7 +322,7 @@
                         <h2 className="text-3xl font-black">Панель Адміністратора</h2>
                         <div className="bg-stone-100 p-1 rounded-xl flex gap-1">
                             {['requests', 'schedule'].map(t => (
-                                <button key={t} onClick={() => setTab(t)} className={`px-5 py-2 rounded-lg text-xs font-black uppercase ${tab===t?'bg-white shadow-sm':'text-stone-400'}`}>
+                                <button key={t} onClick={() => setTab(t)} className={`px-5 py-2 rounded-lg text-xs font-black uppercase transition ${tab===t?'bg-white shadow-sm':'text-stone-400 hover:text-stone-600'}`}>
                                     {t === 'requests' ? 'Запити' : 'Графік'}
                                 </button>
                             ))}
@@ -330,26 +331,30 @@
 
                     {tab === 'requests' && (
                         <div className="space-y-4">
-                            {appointments.filter(a => a.status === 'pending').map(a => (
-                                <div key={a.id} className="bg-white p-6 rounded-3xl border shadow-sm flex flex-col md:flex-row justify-between items-center gap-4">
-                                    <div className="flex-1">
-                                        <div className="flex items-center gap-3">
-                                            <span className="font-black text-xl">{a.service}</span>
-                                            <span className="bg-pink-100 text-pink-500 text-[10px] px-2 py-0.5 rounded font-black uppercase">@{a.instagram}</span>
+                            {appointments.filter(a => a.status === 'pending').length === 0 ? (
+                                <div className="p-20 text-center text-stone-300 font-bold border-2 border-dashed rounded-[3rem]">Нових запитів немає</div>
+                            ) : (
+                                appointments.filter(a => a.status === 'pending').map(a => (
+                                    <div key={a.id} className="bg-white p-6 rounded-3xl border shadow-sm flex flex-col md:flex-row justify-between items-center gap-4">
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-3">
+                                                <span className="font-black text-xl">{a.service}</span>
+                                                <span className="bg-pink-100 text-pink-500 text-[10px] px-2 py-0.5 rounded font-black uppercase">@{a.instagram || 'no_ig'}</span>
+                                            </div>
+                                            <p className="text-stone-400 font-bold">{a.date} о {a.time} • {a.userEmail}</p>
                                         </div>
-                                        <p className="text-stone-400 font-bold">{a.date} о {a.time} • {a.userEmail}</p>
+                                        <div className="flex gap-2">
+                                            <button onClick={() => onUpdateStatus(a.id, 'confirmed')} className="bg-green-500 text-white px-6 py-3 rounded-xl font-bold transition hover:bg-green-600">Прийняти</button>
+                                            <button onClick={() => onUpdateStatus(a.id, 'rejected')} className="bg-stone-100 text-red-500 px-6 py-3 rounded-xl font-bold transition hover:bg-red-50">Відхилити</button>
+                                        </div>
                                     </div>
-                                    <div className="flex gap-2">
-                                        <button onClick={() => onUpdateStatus(a.id, 'confirmed')} className="bg-green-500 text-white px-6 py-3 rounded-xl font-bold">Прийняти</button>
-                                        <button onClick={() => onUpdateStatus(a.id, 'rejected')} className="bg-stone-100 text-red-500 px-6 py-3 rounded-xl font-bold">Відхилити</button>
-                                    </div>
-                                </div>
-                            ))}
+                                ))
+                            )}
                         </div>
                     )}
 
                     {tab === 'schedule' && (
-                        <div className="bg-white p-8 rounded-[3rem] border shadow-sm overflow-x-auto">
+                        <div className="bg-white p-8 rounded-[3rem] border shadow-sm overflow-x-auto no-scrollbar">
                             <div className="min-w-[700px] flex gap-4">
                                 {dates.map(date => (
                                     <div key={date} className="flex-1 space-y-2">
@@ -360,7 +365,7 @@
                                         {TIME_SLOTS.map(t => {
                                             const isBlocked = blockedSlots.find(b => b.date === date && b.time === t);
                                             return (
-                                                <button key={t} onClick={() => onToggleBlock(date, t)} className={`w-full p-3 rounded-xl text-[10px] font-black transition ${isBlocked ? 'bg-red-500 text-white' : 'bg-stone-50 text-stone-400 hover:bg-stone-200'}`}>
+                                                <button key={t} onClick={() => onToggleBlock(date, t)} className={`w-full p-3 rounded-xl text-[10px] font-black transition ${isBlocked ? 'bg-red-500 text-white shadow-lg shadow-red-100' : 'bg-stone-50 text-stone-400 hover:bg-stone-200'}`}>
                                                     {isBlocked ? 'ЗАКРИТО' : t}
                                                 </button>
                                             );
@@ -391,14 +396,14 @@
             return (
                 <div className="fixed inset-0 bg-stone-900/40 backdrop-blur-md z-[100] flex items-center justify-center p-6">
                     <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-10 shadow-2xl relative">
-                        <button onClick={onClose} className="absolute top-6 right-6 text-stone-300">✕</button>
+                        <button onClick={onClose} className="absolute top-6 right-6 text-stone-300 hover:text-stone-500 transition">✕</button>
                         <h2 className="text-3xl font-black mb-8">{isReg ? 'Реєстрація' : 'Вхід'}</h2>
                         <form className="space-y-4" onSubmit={handleAuth}>
-                            <input type="email" placeholder="Email" required className="w-full p-4 bg-stone-50 rounded-xl outline-none border focus:border-pink-500" value={email} onChange={e => setEmail(e.target.value)} />
-                            <input type="password" placeholder="Пароль" required className="w-full p-4 bg-stone-50 rounded-xl outline-none border focus:border-pink-500" value={pass} onChange={e => setPass(e.target.value)} />
-                            <button className="w-full bg-pink-500 text-white py-4 rounded-xl font-bold shadow-lg shadow-pink-100">{isReg ? 'Створити акаунт' : 'Увійти'}</button>
+                            <input type="email" placeholder="Email" required className="w-full p-4 bg-stone-50 rounded-xl outline-none border border-stone-100 focus:border-pink-500 transition" value={email} onChange={e => setEmail(e.target.value)} />
+                            <input type="password" placeholder="Пароль" required className="w-full p-4 bg-stone-50 rounded-xl outline-none border border-stone-100 focus:border-pink-500 transition" value={pass} onChange={e => setPass(e.target.value)} />
+                            <button className="w-full bg-pink-500 text-white py-4 rounded-xl font-bold shadow-lg shadow-pink-100 hover:bg-pink-600 transition">{isReg ? 'Створити акаунт' : 'Увійти'}</button>
                         </form>
-                        <button onClick={() => setIsReg(!isReg)} className="w-full mt-6 text-xs font-black text-stone-400 uppercase tracking-widest">{isReg ? 'Вже є акаунт? Увійти' : 'Немає акаунту? Реєстрація'}</button>
+                        <button onClick={() => setIsReg(!isReg)} className="w-full mt-6 text-[10px] font-black text-stone-400 uppercase tracking-widest hover:text-stone-600 transition">{isReg ? 'Вже є акаунт? Увійти' : 'Немає акаунту? Реєстрація'}</button>
                     </div>
                 </div>
             );
