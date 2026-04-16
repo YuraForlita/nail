@@ -13,16 +13,12 @@
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
-    <!-- Firebase SDK (Modular) -->
-    <script type="importmap">
-    {
-      "imports": {
-        "firebase/app": "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js",
-        "firebase/auth": "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js",
-        "firebase/firestore": "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js"
-      }
-    }
-    </script>
+    <!-- Firebase App (Compat) -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <!-- Firebase Auth (Compat) -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <!-- Firebase Firestore (Compat) -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Playfair+Display:wght@700&display=swap');
@@ -31,30 +27,13 @@
     </style>
 </head>
 <body class="bg-stone-50">
-    <div id="root"></div>
+    <div id="root">
+        <div class="flex items-center justify-center min-h-screen">
+            <p class="text-stone-400">Завантаження додатка...</p>
+        </div>
+    </div>
 
-    <script type="module" data-type="babel">
-        import { initializeApp } from "firebase/app";
-        import { 
-            getAuth, 
-            signInWithEmailAndPassword, 
-            onAuthStateChanged, 
-            signOut,
-            createUserWithEmailAndPassword 
-        } from "firebase/auth";
-        import { 
-            getFirestore, 
-            collection, 
-            addDoc, 
-            onSnapshot, 
-            query, 
-            where, 
-            doc, 
-            updateDoc 
-        } from "firebase/firestore";
-
-        const { useState, useEffect, useMemo } = React;
-
+    <script type="text/babel">
         // --- ВСТАВТЕ ВАШІ ДАНІ СЮДИ ---
         const firebaseConfig = {
         apiKey: "AIzaSyDaE80NIYOWs7f9FZ2lxK_6dbocBsrgqmg",
@@ -66,20 +45,18 @@
         measurementId: "G-SSVYQB90HH"
         };
 
-        // Ініціалізація
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
+        // Перевірка конфігурації
+        const isConfigEmpty = firebaseConfig.apiKey.includes("ВАШ_");
 
-        const ADMIN_EMAIL = 'admin@nail.com';
-        const STATUSES = { PENDING: 'pending', CONFIRMED: 'confirmed', CANCELLED: 'cancelled', REJECTED: 'rejected' };
-        const WORKING_HOURS = Array.from({ length: 11 }, (_, i) => `${i + 9}:00`);
-        
-        const DEFAULT_SERVICES = [
-            { id: '1', name: 'Класичний манікюр', price: 400 },
-            { id: '2', name: 'Гель-лак', price: 600 },
-            { id: '3', name: 'Нарощування', price: 900 },
-        ];
+        // Ініціалізація Firebase (через Compat API для стабільності в браузері)
+        let auth, db;
+        if (!isConfigEmpty) {
+            firebase.initializeApp(firebaseConfig);
+            auth = firebase.auth();
+            db = firebase.firestore();
+        }
+
+        const { useState, useEffect } = React;
 
         function App() {
             const [user, setUser] = useState(null);
@@ -89,110 +66,109 @@
             const [toast, setToast] = useState(null);
             const [showLoginModal, setShowLoginModal] = useState(false);
 
-            // Слідкуємо за станом авторизації
+            if (isConfigEmpty) {
+                return (
+                    <div className="flex items-center justify-center min-h-screen p-6">
+                        <div className="bg-white p-8 rounded-3xl shadow-xl border border-red-100 max-w-md text-center">
+                            <h1 className="text-xl font-bold text-red-600 mb-4">Потрібно підключити Firebase</h1>
+                            <p className="text-stone-600">Вставте ваші ключі (apiKey, projectId тощо) у блок <b>firebaseConfig</b> всередині коду.</p>
+                        </div>
+                    </div>
+                );
+            }
+
             useEffect(() => {
-                const unsubscribe = onAuthStateChanged(auth, (u) => {
+                const unsubscribe = auth.onAuthStateChanged((u) => {
                     setUser(u);
-                    setIsAdmin(u?.email === ADMIN_EMAIL);
+                    setIsAdmin(u?.email === 'admin@nail.com');
                 });
                 return () => unsubscribe();
             }, []);
 
-            // Отримуємо записи з бази даних
             useEffect(() => {
-                if (!user) {
-                    setAppointments([]);
-                    return;
-                }
-
-                // В реальному Firebase ми б використовували колекцію
-                const q = collection(db, "appointments");
-                const unsubscribe = onSnapshot(q, (snapshot) => {
-                    const apps = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    setAppointments(apps);
-                }, (error) => {
-                    console.error("Помилка Firestore:", error);
-                });
-
+                if (!user) return;
+                const unsubscribe = db.collection("appointments")
+                    .onSnapshot((snapshot) => {
+                        const apps = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                        const filtered = isAdmin ? apps : apps.filter(a => a.userId === user.uid);
+                        setAppointments(filtered);
+                    });
                 return () => unsubscribe();
-            }, [user]);
+            }, [user, isAdmin]);
 
             const showToast = (message, type = 'success') => {
                 setToast({ message, type });
                 setTimeout(() => setToast(null), 3000);
             };
 
-            const handleLogin = async (email, password) => {
+            const handleAuth = async (email, password, isReg) => {
                 try {
-                    await signInWithEmailAndPassword(auth, email, password);
+                    if (isReg) {
+                        await auth.createUserWithEmailAndPassword(email, password);
+                        showToast('Реєстрація успішна!');
+                    } else {
+                        await auth.signInWithEmailAndPassword(email, password);
+                        showToast('Вхід успішний!');
+                    }
                     setShowLoginModal(false);
-                    showToast('Успішний вхід!');
                 } catch (e) {
-                    showToast('Помилка: ' + e.message, 'error');
+                    showToast(e.message, 'error');
                 }
             };
 
-            const handleSignOut = () => {
-                signOut(auth);
-                setView('home');
-            };
-
-            const addAppointment = async (data) => {
+            const createBooking = async (data) => {
                 try {
-                    await addDoc(collection(db, "appointments"), {
+                    await db.collection("appointments").add({
                         ...data,
-                        status: STATUSES.PENDING,
+                        status: 'pending',
                         createdAt: new Date().toISOString()
                     });
-                    showToast('Запис надіслано!');
+                    showToast('Записано!');
                     setView('cabinet');
                 } catch (e) {
-                    showToast('Помилка збереження', 'error');
-                }
-            };
-
-            const updateStatus = async (id, status) => {
-                try {
-                    const docRef = doc(db, "appointments", id);
-                    await updateDoc(docRef, { status });
-                    showToast('Статус оновлено');
-                } catch (e) {
-                    showToast('Помилка оновлення', 'error');
+                    showToast('Помилка запису', 'error');
                 }
             };
 
             return (
-                <div className="min-h-screen">
-                    <nav className="bg-white border-b sticky top-0 z-40 shadow-sm">
-                        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-                            <div className="text-2xl font-serif font-bold text-pink-600 cursor-pointer" onClick={() => setView('home')}>
-                                NailArt Studio
-                            </div>
-                            <div className="flex items-center space-x-6">
-                                <button onClick={() => setView('home')} className="hover:text-pink-500 transition">Головна</button>
-                                <button onClick={() => setView('booking')} className="hover:text-pink-500 transition">Записатись</button>
-                                <button onClick={() => setView('cabinet')} className="hover:text-pink-500 transition">Кабінет</button>
-                                {isAdmin && <button onClick={() => setView('admin')} className="text-purple-600 font-bold underline">Адмін</button>}
-                                {!user ? (
-                                    <button onClick={() => setShowLoginModal(true)} className="bg-stone-900 text-white px-4 py-2 rounded-xl text-sm font-bold">Вхід</button>
-                                ) : (
-                                    <button onClick={handleSignOut} className="text-stone-400 hover:text-red-500 text-sm">Вихід</button>
-                                )}
-                            </div>
+                <div className="min-h-screen flex flex-col">
+                    <nav className="bg-white border-b px-6 py-4 flex justify-between items-center">
+                        <div className="text-2xl font-serif font-bold text-pink-500 cursor-pointer" onClick={() => setView('home')}>NailArt</div>
+                        <div className="flex gap-4 items-center">
+                            <button onClick={() => setView('booking')} className="text-sm font-semibold">Запис</button>
+                            <button onClick={() => setView('cabinet')} className="text-sm font-semibold">Кабінет</button>
+                            {isAdmin && <button onClick={() => setView('admin')} className="text-sm font-bold text-purple-600">Адмін</button>}
+                            {!user ? (
+                                <button onClick={() => setShowLoginModal(true)} className="bg-stone-900 text-white px-4 py-2 rounded-xl text-xs font-bold">Вхід</button>
+                            ) : (
+                                <button onClick={() => auth.signOut()} className="text-xs text-stone-400">Вихід</button>
+                            )}
                         </div>
                     </nav>
 
-                    <main className="max-w-6xl mx-auto p-8">
-                        {view === 'home' && <HomeView onStart={() => setView('booking')} />}
-                        {view === 'booking' && <BookingView appointments={appointments} user={user} onComplete={addAppointment} requireLogin={() => setShowLoginModal(true)} />}
-                        {view === 'cabinet' && <CabinetView appointments={appointments} user={user} requireLogin={() => setShowLoginModal(true)} />}
-                        {view === 'admin' && (isAdmin ? <AdminView appointments={appointments} onUpdate={updateStatus} /> : <HomeView onStart={() => setView('booking')} />)}
+                    <main className="flex-1 max-w-4xl mx-auto w-full p-6">
+                        {view === 'home' && (
+                            <div className="text-center py-20 space-y-8 animate-in fade-in duration-700">
+                                <h1 className="text-6xl font-serif font-bold">Ідеальний манікюр<br/><span className="text-pink-500 italic">для тебе</span></h1>
+                                <button onClick={() => setView('booking')} className="bg-pink-500 text-white px-12 py-4 rounded-full font-bold text-xl shadow-xl shadow-pink-100 hover:scale-105 transition">Записатись</button>
+                            </div>
+                        )}
+
+                        {view === 'booking' && (
+                            <div className="max-w-md mx-auto bg-white p-8 rounded-[2rem] shadow-sm border space-y-6">
+                                <h2 className="text-2xl font-bold font-serif">Новий запис</h2>
+                                <BookingForm user={user} onSubmit={createBooking} onLogin={() => setShowLoginModal(true)} />
+                            </div>
+                        )}
+
+                        {view === 'cabinet' && <CabinetView appointments={appointments} user={user} />}
+                        {view === 'admin' && <AdminView appointments={appointments} updateStatus={(id, s) => db.collection("appointments").doc(id).update({status: s})} />}
                     </main>
 
-                    {showLoginModal && <LoginModal onClose={() => setShowLoginModal(false)} onLogin={handleLogin} />}
+                    {showLoginModal && <LoginModal onClose={() => setShowLoginModal(false)} onAuth={handleAuth} />}
                     
                     {toast && (
-                        <div className={`fixed bottom-4 right-4 p-4 rounded-lg shadow-2xl z-50 text-white ${toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>
+                        <div className={`fixed bottom-6 right-6 p-4 rounded-2xl shadow-xl text-white font-bold z-50 ${toast.type === 'success' ? 'bg-green-500' : 'bg-red-500'}`}>
                             {toast.message}
                         </div>
                     )}
@@ -200,54 +176,34 @@
             );
         }
 
-        // --- View Components ---
-
-        function HomeView({ onStart }) {
+        function BookingForm({ user, onSubmit, onLogin }) {
+            const [service, setService] = useState('Манікюр');
+            const [date, setDate] = useState('');
+            if (!user) return <div className="text-center py-4"><button onClick={onLogin} className="text-pink-500 font-bold">Увійдіть, щоб обрати час</button></div>;
             return (
-                <div className="text-center space-y-8 py-20">
-                    <h1 className="text-6xl font-serif font-bold">Краса починається <br/> <span className="text-pink-500">з манікюру</span></h1>
-                    <button onClick={onStart} className="px-12 py-4 bg-pink-500 text-white rounded-full font-bold text-lg hover:scale-105 transition shadow-lg">Забронювати візит</button>
-                </div>
-            );
-        }
-
-        function BookingView({ appointments, user, onComplete, requireLogin }) {
-            const [selectedService, setSelectedService] = useState(null);
-            const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-            const [time, setTime] = useState(null);
-
-            if (!user) return <div className="text-center py-10 bg-white rounded-3xl border"><button onClick={requireLogin} className="bg-pink-500 text-white px-8 py-3 rounded-xl">Увійти для запису</button></div>;
-
-            return (
-                <div className="max-w-lg mx-auto bg-white p-8 rounded-3xl border shadow-sm space-y-6">
-                    <h2 className="text-2xl font-bold">Новий запис</h2>
-                    <div className="space-y-2">
-                        {DEFAULT_SERVICES.map(s => (
-                            <div key={s.id} onClick={() => setSelectedService(s)} className={`p-4 border-2 rounded-xl cursor-pointer ${selectedService?.id === s.id ? 'border-pink-500 bg-pink-50' : 'border-stone-100'}`}>
-                                {s.name} - {s.price} грн
-                            </div>
-                        ))}
-                    </div>
-                    <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full p-3 border rounded-xl" />
-                    <div className="grid grid-cols-3 gap-2">
-                        {WORKING_HOURS.map(t => (
-                            <button key={t} onClick={() => setTime(t)} className={`p-2 border rounded-lg ${time === t ? 'bg-pink-500 text-white' : ''}`}>{t}</button>
-                        ))}
-                    </div>
-                    <button onClick={() => onComplete({ service: selectedService.name, date, time, userId: user.uid, userEmail: user.email })} className="w-full py-4 bg-pink-500 text-white rounded-xl font-bold">Підтвердити</button>
+                <div className="space-y-4">
+                    <select className="w-full p-4 border-2 rounded-2xl" value={service} onChange={e => setService(e.target.value)}>
+                        <option>Манікюр</option>
+                        <option>Гель-лак</option>
+                        <option>Нарощування</option>
+                    </select>
+                    <input type="date" className="w-full p-4 border-2 rounded-2xl" value={date} onChange={e => setDate(e.target.value)} />
+                    <button onClick={() => onSubmit({service, date, userId: user.uid, userEmail: user.email})} className="w-full bg-pink-500 text-white py-4 rounded-2xl font-bold shadow-lg">Підтвердити</button>
                 </div>
             );
         }
 
         function CabinetView({ appointments, user }) {
-            if (!user) return <div className="text-center">Будь ласка, увійдіть.</div>;
-            const myApps = appointments.filter(a => a.userId === user.uid);
+            if (!user) return <div className="text-center py-10">Будь ласка, увійдіть.</div>;
             return (
                 <div className="space-y-4">
-                    <h2 className="text-3xl font-bold">Ваші записи</h2>
-                    {myApps.map(a => (
+                    <h2 className="text-3xl font-bold font-serif">Ваші записи</h2>
+                    {appointments.length === 0 ? <p className="text-stone-400">Записів ще немає.</p> : appointments.map(a => (
                         <div key={a.id} className="bg-white p-6 rounded-2xl border flex justify-between items-center shadow-sm">
-                            <div><div className="font-bold">{a.service}</div><div className="text-sm text-stone-500">{a.date} о {a.time}</div></div>
+                            <div>
+                                <div className="font-bold text-lg">{a.service}</div>
+                                <div className="text-stone-500">{a.date}</div>
+                            </div>
                             <div className={`px-4 py-1 rounded-full text-xs font-bold uppercase ${a.status === 'confirmed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{a.status}</div>
                         </div>
                     ))}
@@ -255,19 +211,19 @@
             );
         }
 
-        function AdminView({ appointments, onUpdate }) {
+        function AdminView({ appointments, updateStatus }) {
             return (
                 <div className="space-y-4">
-                    <h2 className="text-3xl font-bold text-purple-700 font-serif">Керування візитами</h2>
+                    <h2 className="text-3xl font-bold text-purple-700 font-serif">Управління</h2>
                     {appointments.map(a => (
                         <div key={a.id} className="bg-white p-6 rounded-2xl border flex justify-between items-center shadow-md">
                             <div>
                                 <div className="font-bold">{a.service}</div>
-                                <div className="text-sm">{a.userEmail} | {a.date} {a.time}</div>
+                                <div className="text-xs text-stone-500">{a.userEmail} | {a.date}</div>
                             </div>
                             <div className="flex gap-2">
-                                <button onClick={() => onUpdate(a.id, 'confirmed')} className="bg-green-500 text-white px-4 py-2 rounded-lg text-sm font-bold">Прийняти</button>
-                                <button onClick={() => onUpdate(a.id, 'rejected')} className="bg-red-500 text-white px-4 py-2 rounded-lg text-sm font-bold">Відхилити</button>
+                                <button onClick={() => updateStatus(a.id, 'confirmed')} className="bg-green-500 text-white px-4 py-2 rounded-xl text-xs font-bold">ОК</button>
+                                <button onClick={() => updateStatus(a.id, 'rejected')} className="bg-red-500 text-white px-4 py-2 rounded-xl text-xs font-bold">X</button>
                             </div>
                         </div>
                     ))}
@@ -275,17 +231,18 @@
             );
         }
 
-        function LoginModal({ onClose, onLogin }) {
+        function LoginModal({ onClose, onAuth }) {
             const [email, setEmail] = useState('');
             const [pass, setPass] = useState('');
+            const [isReg, setIsReg] = useState(false);
             return (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl">
-                        <h2 className="text-2xl font-bold mb-6">Вхід в особистий кабінет</h2>
-                        <input type="email" placeholder="Email" className="w-full p-4 border rounded-xl mb-4" value={email} onChange={e => setEmail(e.target.value)} />
-                        <input type="password" placeholder="Пароль" className="w-full p-4 border rounded-xl mb-6" value={pass} onChange={e => setPass(e.target.value)} />
-                        <button onClick={() => onLogin(email, pass)} className="w-full py-4 bg-pink-500 text-white rounded-xl font-bold hover:bg-pink-600 transition">Увійти</button>
-                        <button onClick={onClose} className="w-full mt-4 text-stone-400 text-sm">Закрити</button>
+                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                    <div className="bg-white p-10 rounded-[2.5rem] w-full max-w-sm shadow-2xl">
+                        <h2 className="text-2xl font-bold mb-6 font-serif">{isReg ? 'Реєстрація' : 'Вхід'}</h2>
+                        <input placeholder="Email" className="w-full p-4 bg-stone-50 border rounded-2xl mb-3 outline-none focus:border-pink-500" value={email} onChange={e => setEmail(e.target.value)} />
+                        <input type="password" placeholder="Пароль" className="w-full p-4 bg-stone-50 border rounded-2xl mb-6 outline-none focus:border-pink-500" value={pass} onChange={e => setPass(e.target.value)} />
+                        <button onClick={() => onAuth(email, pass, isReg)} className="w-full bg-pink-500 text-white py-4 rounded-2xl font-bold shadow-lg shadow-pink-100 mb-4">{isReg ? 'Створити' : 'Увійти'}</button>
+                        <button onClick={() => setIsReg(!isReg)} className="w-full text-xs text-stone-400 font-bold hover:text-pink-500 uppercase tracking-widest">{isReg ? 'Вже є акаунт? Увійти' : 'Немає акаунту? Реєстрація'}</button>
                     </div>
                 </div>
             );
