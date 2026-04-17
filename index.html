@@ -3,13 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NailArt Elite - Studio Management System</title>
+    <title>NailArt Elite - Studio OS</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/framer-motion/10.16.4/framer-motion.umd.min.js"></script>
     
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
@@ -18,100 +17,52 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Cormorant+Garamond:ital,wght@1,600&display=swap');
         
-        :root {
-            --primary: #f43f5e;
-            --surface: #ffffff;
-            --background: #fafaf9;
-        }
-
-        body { 
-            font-family: 'Outfit', sans-serif; 
-            background-color: var(--background);
-            color: #1c1917;
-            overflow-x: hidden;
-        }
-
+        :root { --primary: #f43f5e; --bg: #fafaf9; }
+        body { font-family: 'Outfit', sans-serif; background-color: var(--bg); color: #1c1917; -webkit-tap-highlight-color: transparent; }
         .font-serif { font-family: 'Cormorant Garamond', serif; }
-
-        .glass-card {
-            background: rgba(255, 255, 255, 0.7);
-            backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.5);
-            box-shadow: 0 8px 32px rgba(0,0,0,0.03);
-        }
-
-        .premium-shadow {
-            box-shadow: 0 20px 50px -12px rgba(0, 0, 0, 0.05);
-        }
-
+        .glass { background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(15px); border: 1px solid rgba(255, 255, 255, 0.5); }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         
-        .nav-active {
-            color: var(--primary);
-        }
-        .nav-active::after {
-            content: '';
-            position: absolute;
-            bottom: -4px;
-            left: 0;
-            width: 100%;
-            height: 2px;
-            background: var(--primary);
-            border-radius: 2px;
-        }
-
-        @keyframes float {
-            0% { transform: translateY(0px); }
-            50% { transform: translateY(-10px); }
-            100% { transform: translateY(0px); }
-        }
-        .animate-float { animation: float 6s ease-in-out infinite; }
-
-        .booking-step-active { border-color: var(--primary); background: #fff1f2; }
+        /* Mobile adjustment for booking window */
+        .booking-container { max-height: calc(100vh - 200px); overflow-y: auto; }
+        
+        .btn-primary { @apply bg-rose-500 text-white font-black py-4 rounded-2xl shadow-lg shadow-rose-100 active:scale-95 transition-all; }
+        .btn-secondary { @apply bg-stone-900 text-white font-black py-4 rounded-2xl active:scale-95 transition-all; }
+        
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade { animation: fadeIn 0.4s ease-out forwards; }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
     <script type="text/babel">
-        // --- INITIALIZATION ---
         const firebaseConfig = {
             apiKey: "AIzaSyDaE80NIYOWs7f9FZ2lxK_6dbocBsrgqmg",
             authDomain: "nail-e8a3c.firebaseapp.com",
             projectId: "nail-e8a3c",
             storageBucket: "nail-e8a3c.firebasestorage.app",
             messagingSenderId: "1064829438247",
-            appId: "1:1064829438247:web:75278e58ed0c259d720102",
-            measurementId: "G-SSVYQB90HH"
+            appId: "1:1064829438247:web:75278e58ed0c259d720102"
         };
 
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
         const auth = firebase.auth();
 
-        const { useState, useEffect, useMemo, useCallback } = React;
-        const ADMIN_EMAIL = "admin@nail.com"; 
-
-        // --- DATA ---
-        const INITIAL_SERVICES = [
-            { id: '1', name: "Класичний Манікюр", price: 600, duration: "1.5 год", category: "База" },
-            { id: '2', name: "Нарощування Gel-X", price: 1200, duration: "2.5 год", category: "Преміум" },
-            { id: '3', name: "Укріплення Полігелем", price: 850, duration: "2 год", category: "Топ" },
-            { id: '4', name: "Дизайн (Premium)", price: 300, duration: "0.5 год", category: "Додатково" }
-        ];
-
-        const TIME_SLOTS_BASE = ["09:00", "11:30", "14:00", "16:30", "19:00"];
-
-        // --- COMPONENTS ---
+        const { useState, useEffect, useMemo } = React;
+        const ADMIN_EMAIL = "admin@nail.com";
 
         function App() {
-            const [view, setView] = useState('home'); 
+            const [view, setView] = useState('home');
             const [user, setUser] = useState(null);
             const [profile, setProfile] = useState(null);
             const [isAdmin, setIsAdmin] = useState(false);
             const [appointments, setAppointments] = useState([]);
-            const [services, setServices] = useState(INITIAL_SERVICES);
+            const [services, setServices] = useState([]);
+            const [usersList, setUsersList] = useState([]);
             const [scheduleConfig, setScheduleConfig] = useState({});
+            const [studioData, setStudioData] = useState({ heroTitle: '', heroSub: '', videoUrl: '', gallery: [] });
             const [loading, setLoading] = useState(true);
             const [showAuth, setShowAuth] = useState(false);
 
@@ -120,13 +71,10 @@
                     if (u) {
                         setUser(u);
                         setIsAdmin(u.email === ADMIN_EMAIL);
-                        const pDoc = await db.collection("users").doc(u.uid).get();
-                        if (pDoc.exists) setProfile(pDoc.data());
-                        else {
-                            const newProfile = { instagram: '', isBlacklisted: false, createdAt: new Date() };
-                            await db.collection("users").doc(u.uid).set(newProfile);
-                            setProfile(newProfile);
-                        }
+                        db.collection("users").doc(u.uid).onSnapshot(doc => {
+                            if (doc.exists) setProfile(doc.data());
+                            else db.collection("users").doc(u.uid).set({ instagram: '', isBlacklisted: false, isVIP: false });
+                        });
                     } else {
                         setUser(null);
                         setIsAdmin(false);
@@ -139,77 +87,63 @@
 
             useEffect(() => {
                 if (!user) return;
-                const unsubApps = db.collection("appointments").onSnapshot(s => {
-                    setAppointments(s.docs.map(d => ({id: d.id, ...d.data()})));
-                });
-                const unsubServ = db.collection("settings").doc("services").onSnapshot(d => {
-                    if(d.exists) setServices(d.data().list);
-                });
-                const unsubSched = db.collection("settings").doc("schedule").onSnapshot(d => {
-                    if(d.exists) setScheduleConfig(d.data());
-                });
-                return () => { unsubApps(); unsubServ(); unsubSched(); };
+                const unsubApps = db.collection("appointments").onSnapshot(s => setAppointments(s.docs.map(d => ({id:d.id, ...d.data()}))));
+                const unsubServ = db.collection("settings").doc("services").onSnapshot(d => d.exists && setServices(d.data().list || []));
+                const unsubSched = db.collection("settings").doc("schedule").onSnapshot(d => d.exists && setScheduleConfig(d.data()));
+                const unsubStudio = db.collection("settings").doc("studio").onSnapshot(d => d.exists && setStudioData(d.data()));
+                
+                let unsubUsers;
+                if (user.email === ADMIN_EMAIL) {
+                    unsubUsers = db.collection("users").onSnapshot(s => setUsersList(s.docs.map(d => ({uid: d.id, ...d.data()}))));
+                }
+                
+                return () => { unsubApps(); unsubServ(); unsubSched(); unsubStudio(); unsubUsers && unsubUsers(); };
             }, [user]);
 
-            const handleLogout = () => auth.signOut().then(() => setView('home'));
+            if (loading) return <div className="h-screen flex items-center justify-center font-black text-rose-500 animate-pulse">ELITE OS...</div>;
 
-            if (loading) return (
-                <div className="h-screen w-full flex flex-col items-center justify-center bg-stone-50">
-                    <div className="w-16 h-16 border-4 border-rose-500 border-t-transparent rounded-full animate-spin"></div>
-                    <p className="mt-6 font-black tracking-widest uppercase text-xs text-stone-400">Loading Elite Experience</p>
-                </div>
-            );
+            const handleNav = (v) => {
+                if (!user && (v === 'cabinet' || v === 'admin' || v === 'booking')) {
+                    setShowAuth(true);
+                    return;
+                }
+                setView(v);
+            };
 
             return (
                 <div className="min-h-screen flex flex-col">
-                    {/* Header */}
+                    {/* Desktop Header */}
                     <header className="sticky top-0 z-[100] h-20 bg-white/80 backdrop-blur-xl border-b border-stone-100 px-6 flex items-center justify-between">
-                        <div className="flex items-center gap-4 cursor-pointer group" onClick={() => setView('home')}>
-                            <div className="w-12 h-12 bg-stone-900 text-white rounded-2xl flex items-center justify-center font-black text-xl transition-all group-hover:bg-rose-500 group-hover:rotate-6">N</div>
-                            <div className="flex flex-col">
-                                <span className="font-black text-xl tracking-tighter uppercase leading-none">NailArt <span className="text-rose-500">Elite</span></span>
-                                <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mt-1">Studio Manager</span>
-                            </div>
+                        <div className="flex items-center gap-3 cursor-pointer" onClick={() => setView('home')}>
+                            <div className="w-10 h-10 bg-stone-900 text-white rounded-xl flex items-center justify-center font-black">N</div>
+                            <span className="font-black text-lg uppercase tracking-tighter">NailArt <span className="text-rose-500">Elite</span></span>
                         </div>
-
-                        {/* Desktop Nav */}
-                        <nav className="hidden lg:flex items-center gap-10">
-                            <NavLink active={view==='home'} onClick={() => setView('home')}>Головна</NavLink>
-                            <NavLink active={view==='booking'} onClick={() => setView('booking')}>Запис</NavLink>
-                            {user && !isAdmin && <NavLink active={view==='cabinet'} onClick={() => setView('cabinet')}>Профіль</NavLink>}
-                            {isAdmin && <button onClick={() => setView('admin')} className="bg-stone-900 text-white px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-rose-500 transition-colors">Admin Hub</button>}
+                        <nav className="hidden lg:flex items-center gap-8">
+                            <button onClick={() => handleNav('home')} className={`text-[11px] font-black uppercase tracking-widest ${view==='home'?'text-rose-500':'text-stone-400'}`}>Головна</button>
+                            <button onClick={() => handleNav('booking')} className={`text-[11px] font-black uppercase tracking-widest ${view==='booking'?'text-rose-500':'text-stone-400'}`}>Запис</button>
+                            {user && <button onClick={() => handleNav(isAdmin ? 'admin' : 'cabinet')} className={`text-[11px] font-black uppercase tracking-widest ${['cabinet','admin'].includes(view)?'text-rose-500':'text-stone-400'}`}>Кабінет</button>}
                         </nav>
-
                         <div className="flex items-center gap-4">
                             {!user ? (
-                                <button onClick={() => setShowAuth(true)} className="bg-rose-500 text-white px-6 py-2.5 rounded-full font-bold text-sm shadow-lg shadow-rose-200">Увійти</button>
+                                <button onClick={() => setShowAuth(true)} className="bg-rose-500 text-white px-6 py-2 rounded-full font-black text-xs">Увійти</button>
                             ) : (
-                                <div className="flex items-center gap-3">
-                                    <div className="hidden md:block text-right">
-                                        <p className="text-xs font-black truncate max-w-[120px]">{user.email}</p>
-                                        <button onClick={handleLogout} className="text-[9px] font-bold text-rose-500 uppercase tracking-widest">Вийти</button>
-                                    </div>
-                                    <div className="w-10 h-10 bg-stone-100 rounded-full flex items-center justify-center border-2 border-white shadow-sm font-bold text-stone-400">
-                                        {user.email[0].toUpperCase()}
-                                    </div>
-                                </div>
+                                <button onClick={() => auth.signOut()} className="text-[10px] font-black text-stone-300 hover:text-rose-500 transition-colors uppercase">Вихід</button>
                             )}
                         </div>
                     </header>
 
-                    {/* Main Content */}
-                    <main className="flex-1 max-w-7xl mx-auto w-full p-4 md:p-8">
-                        {view === 'home' && <HomeView setView={setView} services={services} />}
-                        {view === 'booking' && <BookingFlow user={user} profile={profile} appointments={appointments} services={services} scheduleConfig={scheduleConfig} setShowAuth={setShowAuth} setView={setView} />}
-                        {view === 'cabinet' && <UserCabinet user={user} profile={profile} appointments={appointments} setProfile={setProfile} />}
-                        {view === 'admin' && isAdmin && <AdminConsole appointments={appointments} services={services} scheduleConfig={scheduleConfig} />}
+                    <main className="flex-1 max-w-7xl mx-auto w-full p-4 md:p-8 pb-32">
+                        {view === 'home' && <HomeView setView={setView} services={services} studioData={studioData} />}
+                        {view === 'booking' && <BookingView user={user} profile={profile} appointments={appointments} services={services} scheduleConfig={scheduleConfig} setView={setView} />}
+                        {view === 'cabinet' && user && <CabinetView user={user} profile={profile} appointments={appointments} setProfile={setProfile} />}
+                        {view === 'admin' && isAdmin && <AdminView appointments={appointments} services={services} usersList={usersList} scheduleConfig={scheduleConfig} studioData={studioData} />}
                     </main>
 
-                    {/* Mobile Navigation Bar */}
-                    <div className="lg:hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] w-[90%] max-w-sm glass-card rounded-[2rem] px-8 py-4 flex items-center justify-between border border-stone-200 shadow-2xl">
-                        <MobileNavItem active={view==='home'} onClick={() => setView('home')} icon="🏠" />
-                        <MobileNavItem active={view==='booking'} onClick={() => setView('booking')} icon="🗓️" />
-                        <MobileNavItem active={view==='cabinet' || view==='admin'} onClick={() => setView(isAdmin ? 'admin' : 'cabinet')} icon={isAdmin ? "🛠️" : "👤"} />
+                    {/* Mobile Navigation */}
+                    <div className="lg:hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] w-[90%] max-w-sm glass rounded-[2rem] px-8 py-4 flex items-center justify-between shadow-2xl border border-white">
+                        <button onClick={() => handleNav('home')} className={`text-2xl ${view==='home'?'scale-125 text-rose-500':'opacity-40'}`}>🏠</button>
+                        <button onClick={() => handleNav('booking')} className={`text-2xl ${view==='booking'?'scale-125 text-rose-500':'opacity-40'}`}>🗓️</button>
+                        <button onClick={() => handleNav(isAdmin ? 'admin' : 'cabinet')} className={`text-2xl ${['cabinet','admin'].includes(view)?'scale-125 text-rose-500':'opacity-40'}`}>👤</button>
                     </div>
 
                     {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
@@ -217,67 +151,36 @@
             );
         }
 
-        const NavLink = ({ children, active, onClick }) => (
-            <button onClick={onClick} className={`relative text-[11px] font-black uppercase tracking-[0.2em] transition-colors hover:text-rose-500 ${active ? 'text-rose-500 nav-active' : 'text-stone-400'}`}>
-                {children}
-            </button>
-        );
+        // --- SUB-COMPONENTS ---
 
-        const MobileNavItem = ({ active, onClick, icon }) => (
-            <button onClick={onClick} className={`text-2xl transition-all ${active ? 'scale-125 brightness-110' : 'grayscale opacity-50'}`}>
-                {icon}
-            </button>
-        );
-
-        // --- SUB-VIEWS ---
-
-        function HomeView({ setView, services }) {
+        function HomeView({ setView, services, studioData }) {
             return (
-                <div className="space-y-24 animate-in fade-in duration-1000">
-                    {/* Hero */}
-                    <section className="relative h-[600px] rounded-[3rem] overflow-hidden bg-stone-900 flex items-center px-10 md:px-20">
-                        <div className="absolute inset-0 opacity-40">
-                            <div className="absolute top-0 right-0 w-96 h-96 bg-rose-500 rounded-full blur-[150px] animate-float"></div>
-                            <div className="absolute bottom-0 left-0 w-64 h-64 bg-amber-200 rounded-full blur-[100px] animate-float" style={{animationDelay: '2s'}}></div>
+                <div className="space-y-20 animate-fade">
+                    <section className="relative h-[550px] md:h-[650px] rounded-[3rem] overflow-hidden bg-stone-900 flex items-center p-8 md:p-20">
+                        <div className="absolute inset-0 opacity-30">
+                            <div className="absolute top-0 right-0 w-96 h-96 bg-rose-500 rounded-full blur-[120px]"></div>
                         </div>
-                        <div className="relative z-10 max-w-3xl space-y-8">
-                            <span className="inline-block px-5 py-2 bg-rose-500 text-white text-[10px] font-black uppercase tracking-widest rounded-full">Kyiv Elite Studio</span>
-                            <h1 className="text-6xl md:text-8xl font-black text-white leading-[0.9] tracking-tighter">
-                                Твій манікюр — <br/> 
-                                <span className="text-rose-500 font-serif italic font-normal lowercase">це мистецтво</span>
+                        <div className="relative z-10 max-w-3xl space-y-6">
+                            <h1 className="text-5xl md:text-8xl font-black text-white leading-tight tracking-tighter">
+                                {studioData.heroTitle || "Elite Nail Art"} <br/> 
+                                <span className="text-rose-500 font-serif italic lowercase font-normal">{studioData.heroSub || "Studio Boutique"}</span>
                             </h1>
-                            <p className="text-stone-400 text-lg md:text-xl font-medium max-w-xl">
-                                Ми поєднали преміальний сервіс, бездоганну стерильність та найсучасніші техніки дизайну. Забудь про очікування — забронюй свій час за 30 секунд.
-                            </p>
-                            <div className="flex flex-wrap gap-4">
-                                <button onClick={() => setView('booking')} className="bg-white text-stone-900 px-10 py-5 rounded-2xl font-black hover:bg-rose-500 hover:text-white transition-all transform hover:-translate-y-1 shadow-2xl">Записатися онлайн</button>
-                                <button className="border border-stone-700 text-white px-10 py-5 rounded-2xl font-black hover:border-white transition-all">Наші роботи</button>
+                            <div className="flex flex-col sm:flex-row gap-4 pt-6">
+                                <button onClick={() => setView('booking')} className="bg-rose-500 text-white px-10 py-5 rounded-2xl font-black shadow-xl shadow-rose-900/20 hover:scale-105 transition">Записатися онлайн</button>
+                                <button className="bg-white/10 text-white border border-white/20 px-10 py-5 rounded-2xl font-black hover:bg-white/20 transition">Наші роботи</button>
                             </div>
                         </div>
                     </section>
 
-                    {/* Services Grid */}
-                    <section className="space-y-12">
-                        <div className="flex justify-between items-end">
-                            <div>
-                                <h2 className="text-4xl font-black tracking-tight">Наші Послуги</h2>
-                                <p className="text-stone-400 font-medium mt-2">Оберіть свій ідеальний догляд</p>
-                            </div>
-                            <button onClick={() => setView('booking')} className="text-rose-500 font-black text-sm uppercase tracking-widest">Переглянути всі →</button>
-                        </div>
+                    <section className="space-y-10">
+                        <h2 className="text-4xl font-black tracking-tight">Популярні Послуги</h2>
                         <div className="grid md:grid-cols-4 gap-6">
                             {services.slice(0, 4).map((s, i) => (
-                                <div key={i} className="group bg-white p-8 rounded-[2.5rem] border border-stone-100 shadow-sm hover:shadow-xl hover:border-rose-100 transition-all cursor-pointer">
-                                    <div className="w-12 h-12 bg-stone-50 rounded-2xl mb-6 flex items-center justify-center group-hover:bg-rose-500 transition-colors">
-                                        <span className="text-2xl group-hover:scale-110 transition-transform">💅</span>
-                                    </div>
-                                    <p className="text-[10px] font-black text-stone-300 uppercase tracking-widest mb-1">{s.category}</p>
+                                <div key={i} className="bg-white p-8 rounded-[2.5rem] border border-stone-100 shadow-sm hover:shadow-xl transition-all">
+                                    <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest mb-2">{s.category}</p>
                                     <h3 className="text-xl font-black mb-1">{s.name}</h3>
-                                    <p className="text-rose-500 font-black text-lg">{s.price} ₴</p>
-                                    <div className="mt-6 pt-6 border-t border-stone-50 flex items-center justify-between text-stone-300">
-                                        <span className="text-xs font-bold">{s.duration}</span>
-                                        <span className="text-lg opacity-0 group-hover:opacity-100 transition-opacity">→</span>
-                                    </div>
+                                    <p className="text-stone-400 font-bold mb-6">{s.price} ₴ • {s.duration}</p>
+                                    <button onClick={() => setView('booking')} className="text-stone-900 font-black text-xs uppercase border-b-2 border-rose-500 pb-1">Забронювати</button>
                                 </div>
                             ))}
                         </div>
@@ -286,130 +189,85 @@
             );
         }
 
-        function BookingFlow({ user, profile, appointments, services, scheduleConfig, setShowAuth, setView }) {
+        function BookingView({ user, profile, appointments, services, scheduleConfig, setView }) {
             const [step, setStep] = useState(1);
             const [selService, setSelService] = useState(null);
             const [selDate, setSelDate] = useState('');
             const [selTime, setSelTime] = useState('');
 
-            if (!user) return (
-                <div className="max-w-md mx-auto py-20 text-center space-y-8 animate-in slide-in-from-bottom duration-500">
-                    <div className="w-24 h-24 bg-rose-100 text-rose-500 rounded-full mx-auto flex items-center justify-center text-4xl">🔐</div>
-                    <h2 className="text-3xl font-black">Потрібен доступ</h2>
-                    <p className="text-stone-400 font-medium">Для швидкого та зручного запису, будь ласка, увійдіть у свій профіль.</p>
-                    <button onClick={() => setShowAuth(true)} className="w-full bg-rose-500 text-white py-5 rounded-2xl font-black shadow-xl shadow-rose-200 hover:scale-105 transition">Увійти зараз</button>
-                </div>
-            );
+            if (profile?.isBlacklisted) return <div className="text-center py-20 font-black text-rose-500">Ваш доступ обмежено адміністратором.</div>;
 
-            if (profile?.isBlacklisted) return (
-                <div className="max-w-md mx-auto py-20 text-center space-y-6">
-                    <div className="text-6xl">⛔</div>
-                    <h2 className="text-3xl font-black">Доступ обмежено</h2>
-                    <p className="text-stone-400">На жаль, ваш акаунт було заблоковано адміністратором. Зв'яжіться з нами для уточнення.</p>
-                </div>
-            );
+            const isTaken = (t) => appointments.some(a => a.date === selDate && a.time === t && ['confirmed','pending'].includes(a.status));
+            const availableSlots = scheduleConfig[selDate] || ["09:00", "11:30", "14:00", "16:30", "19:00"];
 
-            const getSlots = () => scheduleConfig[selDate] || TIME_SLOTS_BASE;
-            const isTaken = (t) => appointments.some(a => a.date === selDate && a.time === t && (a.status === 'confirmed' || a.status === 'pending'));
-
-            const completeBooking = async () => {
-                if (!profile.instagram) return alert("Будь ласка, вкажіть ваш Instagram в профілі перед записом.");
-                try {
-                    await db.collection("appointments").add({
-                        userId: user.uid,
-                        userEmail: user.email,
-                        instagram: profile.instagram,
-                        service: selService.name,
-                        price: selService.price,
-                        date: selDate,
-                        time: selTime,
-                        status: 'pending',
-                        createdAt: new Date().toISOString()
-                    });
+            const handleFinalize = async () => {
+                if (!profile.instagram) {
+                    alert("Спочатку вкажіть ваш Instagram у профілі!");
                     setView('cabinet');
-                } catch(e) { alert("Помилка запису"); }
+                    return;
+                }
+                await db.collection("appointments").add({
+                    userId: user.uid,
+                    userEmail: user.email,
+                    instagram: profile.instagram,
+                    service: selService.name,
+                    price: selService.price,
+                    date: selDate,
+                    time: selTime,
+                    status: 'pending',
+                    createdAt: new Date().toISOString()
+                });
+                setView('cabinet');
             };
 
             return (
-                <div className="max-w-3xl mx-auto space-y-10">
-                    {/* Stepper */}
-                    <div className="flex items-center justify-between max-w-xs mx-auto mb-12">
+                <div className="max-w-2xl mx-auto animate-fade">
+                    <div className="flex justify-between mb-12">
                         {[1, 2, 3].map(i => (
-                            <div key={i} className="flex items-center">
-                                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black transition-all ${step >= i ? 'bg-rose-500 text-white scale-110' : 'bg-stone-200 text-stone-500'}`}>{i}</div>
-                                {i < 3 && <div className={`w-12 h-1 ${step > i ? 'bg-rose-500' : 'bg-stone-200'}`}></div>}
-                            </div>
+                            <div key={i} className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-xs ${step >= i ? 'bg-rose-500 text-white' : 'bg-stone-200'}`}>{i}</div>
                         ))}
                     </div>
 
-                    <div className="glass-card rounded-[3rem] p-8 md:p-12 border border-white shadow-2xl space-y-10">
+                    <div className="bg-white p-6 md:p-12 rounded-[3rem] shadow-xl border border-stone-100 booking-container">
                         {step === 1 && (
-                            <div className="space-y-6 animate-in fade-in slide-in-from-right duration-500">
-                                <h2 className="text-4xl font-black tracking-tight">Оберіть Послугу</h2>
-                                <div className="grid sm:grid-cols-2 gap-4">
+                            <div className="space-y-6">
+                                <h2 className="text-3xl font-black">Оберіть послугу</h2>
+                                <div className="grid gap-3">
                                     {services.map(s => (
-                                        <button key={s.id} onClick={() => {setSelService(s); setStep(2);}} className={`p-6 rounded-3xl border-2 text-left transition-all hover:border-rose-300 ${selService?.id === s.id ? 'border-rose-500 bg-rose-50' : 'border-stone-50 bg-stone-50/50'}`}>
-                                            <p className="text-[10px] font-black text-stone-300 uppercase mb-1">{s.category}</p>
+                                        <button key={s.id} onClick={() => {setSelService(s); setStep(2);}} className="p-6 rounded-2xl border-2 border-stone-50 hover:border-rose-200 text-left transition-all">
                                             <p className="font-black text-lg">{s.name}</p>
-                                            <p className="text-rose-500 font-bold">{s.price} ₴ • {s.duration}</p>
+                                            <p className="text-rose-500 font-bold">{s.price} ₴</p>
                                         </button>
                                     ))}
                                 </div>
                             </div>
                         )}
-
                         {step === 2 && (
-                            <div className="space-y-8 animate-in fade-in slide-in-from-right duration-500">
-                                <h2 className="text-4xl font-black tracking-tight">Дата та Час</h2>
-                                <div className="space-y-6">
-                                    <input type="date" min={new Date().toISOString().split('T')[0]} value={selDate} onChange={e => setSelDate(e.target.value)} className="w-full p-5 bg-stone-100 rounded-2xl outline-none font-bold text-lg" />
-                                    {selDate && (
-                                        <div className="grid grid-cols-3 md:grid-cols-5 gap-3">
-                                            {getSlots().map(t => {
-                                                const taken = isTaken(t);
-                                                return (
-                                                    <button key={t} disabled={taken} onClick={() => setSelTime(t)} className={`p-4 rounded-xl font-black text-xs transition-all ${taken ? 'bg-stone-50 text-stone-200 cursor-not-allowed' : selTime === t ? 'bg-rose-500 text-white shadow-xl shadow-rose-200 scale-105' : 'bg-stone-100 hover:bg-rose-100'}`}>
-                                                        {t}
-                                                    </button>
-                                                );
-                                            })}
-                                        </div>
-                                    )}
-                                </div>
+                            <div className="space-y-8">
+                                <h2 className="text-3xl font-black">Дата та час</h2>
+                                <input type="date" min={new Date().toISOString().split('T')[0]} value={selDate} onChange={e => setSelDate(e.target.value)} className="w-full p-5 bg-stone-50 rounded-2xl font-bold" />
+                                {selDate && (
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {availableSlots.map(t => (
+                                            <button key={t} disabled={isTaken(t)} onClick={() => setSelTime(t)} className={`p-4 rounded-xl font-black text-xs ${isTaken(t)?'opacity-20 bg-stone-100':selTime===t?'bg-rose-500 text-white shadow-lg shadow-rose-200':'bg-stone-50 hover:bg-rose-100'}`}>{t}</button>
+                                        ))}
+                                    </div>
+                                )}
                                 <div className="flex gap-4">
-                                    <button onClick={() => setStep(1)} className="flex-1 font-black text-stone-400 uppercase tracking-widest py-5">Назад</button>
-                                    <button disabled={!selTime} onClick={() => setStep(3)} className="flex-[2] bg-stone-900 text-white py-5 rounded-2xl font-black disabled:opacity-30">Продовжити</button>
+                                    <button onClick={() => setStep(1)} className="flex-1 p-5 font-black text-stone-400">Назад</button>
+                                    <button disabled={!selTime} onClick={() => setStep(3)} className="flex-[2] bg-stone-900 text-white py-5 rounded-2xl font-black disabled:opacity-30">Далі</button>
                                 </div>
                             </div>
                         )}
-
                         {step === 3 && (
-                            <div className="space-y-8 animate-in fade-in zoom-in duration-500 text-center">
-                                <h2 className="text-4xl font-black tracking-tight">Підтвердження</h2>
-                                <div className="bg-stone-50 rounded-[2.5rem] p-10 text-left space-y-4 border border-white">
-                                    <div className="flex justify-between border-b border-stone-200 pb-4">
-                                        <span className="text-stone-400 font-bold">Послуга:</span>
-                                        <span className="font-black">{selService.name}</span>
-                                    </div>
-                                    <div className="flex justify-between border-b border-stone-200 pb-4">
-                                        <span className="text-stone-400 font-bold">Дата:</span>
-                                        <span className="font-black">{selDate}</span>
-                                    </div>
-                                    <div className="flex justify-between border-b border-stone-200 pb-4">
-                                        <span className="text-stone-400 font-bold">Час:</span>
-                                        <span className="font-black text-rose-500">{selTime}</span>
-                                    </div>
-                                    <div className="flex justify-between border-b border-stone-200 pb-4">
-                                        <span className="text-stone-400 font-bold">До оплати:</span>
-                                        <span className="font-black text-2xl">{selService.price} ₴</span>
-                                    </div>
-                                    <div className="flex justify-between pt-2">
-                                        <span className="text-stone-400 font-bold">Instagram:</span>
-                                        <span className="font-black text-rose-500">@{profile.instagram || 'не вказано'}</span>
-                                    </div>
+                            <div className="space-y-8 text-center">
+                                <h2 className="text-3xl font-black">Перевірка</h2>
+                                <div className="bg-stone-50 p-8 rounded-3xl text-left space-y-3">
+                                    <p className="flex justify-between font-bold"><span>Послуга:</span> <span>{selService.name}</span></p>
+                                    <p className="flex justify-between font-bold"><span>Дата:</span> <span>{selDate}</span></p>
+                                    <p className="flex justify-between font-bold text-rose-500 uppercase"><span>Час:</span> <span>{selTime}</span></p>
                                 </div>
-                                <button onClick={completeBooking} className="w-full bg-rose-500 text-white py-6 rounded-3xl font-black text-xl shadow-2xl shadow-rose-200 hover:scale-[1.02] active:scale-95 transition-all">Забронювати візит</button>
-                                <button onClick={() => setStep(2)} className="text-stone-300 font-black text-[10px] uppercase tracking-widest">Змінити деталі</button>
+                                <button onClick={handleFinalize} className="w-full bg-rose-500 text-white py-6 rounded-3xl font-black text-xl shadow-xl shadow-rose-100">Записатися</button>
                             </div>
                         )}
                     </div>
@@ -417,241 +275,212 @@
             );
         }
 
-        function UserCabinet({ user, profile, appointments, setProfile }) {
+        function CabinetView({ user, profile, appointments, setProfile }) {
             const [ig, setIg] = useState(profile?.instagram || '');
             const myApps = appointments.filter(a => a.userId === user.uid).sort((a,b) => new Date(b.date) - new Date(a.date));
 
-            const saveIg = async () => {
-                if(!ig) return;
-                const snap = await db.collection("users").where("instagram", "==", ig).get();
-                if(!snap.empty && snap.docs[0].id !== user.uid) return alert("Цей Instagram вже використовується!");
-                await db.collection("users").doc(user.uid).update({instagram: ig});
-                setProfile({...profile, instagram: ig});
-                alert("Профіль успішно оновлено!");
-            };
-
             return (
-                <div className="grid lg:grid-cols-3 gap-10">
-                    <div className="space-y-6">
-                        <div className="glass-card rounded-[3rem] p-10 text-center border border-white shadow-xl">
-                            <div className="w-24 h-24 bg-stone-900 text-white rounded-[2rem] mx-auto flex items-center justify-center text-3xl font-black mb-6 rotate-3">
-                                {user.email[0].toUpperCase()}
-                            </div>
-                            <h3 className="font-black text-xl truncate">{user.email}</h3>
-                            <p className="text-[10px] font-black text-stone-300 uppercase tracking-widest mt-1">Premium Client</p>
-                            
-                            <div className="mt-10 space-y-4 text-left">
-                                <label className="text-[10px] font-black uppercase text-stone-400 ml-2">Instagram Linking</label>
-                                <div className="relative">
-                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-rose-500 font-black">@</span>
-                                    <input value={ig} onChange={e => setIg(e.target.value.replace('@',''))} className="w-full p-4 pl-9 bg-stone-50 rounded-2xl outline-none font-bold border-2 border-transparent focus:border-rose-500 transition-all" />
-                                </div>
-                                <button onClick={saveIg} className="w-full bg-stone-900 text-white py-4 rounded-2xl font-black text-sm hover:bg-black transition-all">Оновити Профіль</button>
-                            </div>
+                <div className="grid lg:grid-cols-3 gap-10 animate-fade">
+                    <div className="glass p-10 rounded-[3rem] h-fit space-y-8">
+                        <div className="w-20 h-20 bg-stone-900 text-white rounded-[2rem] flex items-center justify-center text-3xl font-black mx-auto">
+                            {user.email[0].toUpperCase()}
                         </div>
-
-                        <div className="bg-rose-500 text-white p-8 rounded-[2.5rem] shadow-xl shadow-rose-200">
-                            <p className="font-black text-4xl mb-2 italic font-serif leading-none">VIP</p>
-                            <p className="text-sm font-medium opacity-80">Ви наш особливий клієнт. Кожен 5-й візит зі знижкою 20%!</p>
+                        <div className="text-center space-y-1">
+                            <h3 className="font-black text-lg">{user.email}</h3>
+                            {profile.isVIP && <span className="bg-amber-100 text-amber-600 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">Premium VIP</span>}
+                        </div>
+                        <div className="space-y-4">
+                            <label className="text-[10px] font-black text-stone-400 uppercase ml-2">Мій Instagram</label>
+                            <input value={ig} onChange={e => setIg(e.target.value.replace('@',''))} className="w-full p-4 bg-stone-50 rounded-2xl font-bold border-2 border-transparent focus:border-rose-500 outline-none" placeholder="username" />
+                            <button onClick={async () => {
+                                await db.collection("users").doc(user.uid).update({instagram: ig});
+                                alert("Оновлено!");
+                            }} className="w-full bg-stone-900 text-white py-4 rounded-2xl font-black text-sm">Зберегти</button>
                         </div>
                     </div>
-
-                    <div className="lg:col-span-2 space-y-8">
-                        <h2 className="text-4xl font-black tracking-tight">Мої Візити</h2>
+                    <div className="lg:col-span-2 space-y-6">
+                        <h2 className="text-4xl font-black">Історія візитів</h2>
                         <div className="space-y-4">
                             {myApps.map(a => (
-                                <div key={a.id} className="bg-white p-6 rounded-[2rem] border border-stone-100 flex items-center justify-between group hover:border-rose-200 transition-all">
-                                    <div className="flex items-center gap-6">
-                                        <div className="w-14 h-14 bg-stone-50 rounded-2xl flex flex-col items-center justify-center text-stone-400 group-hover:bg-rose-50 transition-colors">
-                                            <span className="text-[10px] font-black uppercase">{new Date(a.date).toLocaleDateString('uk-UA', {month: 'short'})}</span>
-                                            <span className="text-xl font-black text-stone-900 leading-none">{new Date(a.date).getDate()}</span>
-                                        </div>
-                                        <div>
-                                            <p className="font-black text-lg">{a.service}</p>
-                                            <p className="text-xs font-bold text-stone-400 uppercase tracking-widest">{a.time} • {a.price} ₴</p>
-                                        </div>
+                                <div key={a.id} className="bg-white p-6 rounded-3xl border border-stone-100 flex justify-between items-center group">
+                                    <div>
+                                        <p className="font-black text-lg group-hover:text-rose-500 transition-colors">{a.service}</p>
+                                        <p className="text-xs font-bold text-stone-400 uppercase">{a.date} о {a.time}</p>
                                     </div>
-                                    <div className={`px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-widest ${a.status==='confirmed'?'bg-green-100 text-green-600':'bg-stone-50 text-stone-300'}`}>
-                                        {a.status === 'confirmed' ? 'Підтверджено' : a.status === 'pending' ? 'В обробці' : 'Скасовано'}
+                                    <div className={`px-4 py-2 rounded-full text-[10px] font-black uppercase ${a.status==='confirmed'?'bg-green-100 text-green-600':'bg-stone-50 text-stone-300'}`}>
+                                        {a.status === 'confirmed' ? 'Підтверджено' : a.status === 'pending' ? 'Очікування' : 'Відхилено'}
                                     </div>
                                 </div>
                             ))}
-                            {myApps.length === 0 && (
-                                <div className="p-20 text-center border-2 border-dashed border-stone-100 rounded-[3rem] text-stone-300 font-black italic">У вас ще немає записів</div>
-                            )}
                         </div>
                     </div>
                 </div>
             );
         }
 
-        function AdminConsole({ appointments, services, scheduleConfig }) {
-            const [tab, setTab] = useState('timeline');
-            const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-
-            // Analytics
-            const stats = useMemo(() => {
-                const confirmed = appointments.filter(a => a.status === 'confirmed');
-                const income = confirmed.reduce((s, a) => s + (a.price || 0), 0);
-                const pendingCount = appointments.filter(a => a.status === 'pending').length;
-                return { income, pendingCount, confirmedCount: confirmed.length };
-            }, [appointments]);
+        function AdminView({ appointments, services, usersList, scheduleConfig, studioData }) {
+            const [tab, setTab] = useState('daily');
+            const [selUser, setSelUser] = useState(null);
+            const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
 
             const updateStatus = (id, s) => db.collection("appointments").doc(id).update({status: s});
-            const modifySchedule = async (date, time, remove = false) => {
-                const current = scheduleConfig[date] || TIME_SLOTS_BASE;
-                const updated = remove ? current.filter(t => t !== time) : [...new Set([...current, time])].sort();
-                await db.collection("settings").doc("schedule").set({ [date]: updated }, {merge: true});
-            };
+            const toggleUserFlag = (uid, field, current) => db.collection("users").doc(uid).update({[field]: !current});
 
             return (
-                <div className="space-y-10 animate-in fade-in duration-700">
-                    {/* Admin Dashboard Stats */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="glass-card p-8 rounded-[2.5rem] border-white">
-                            <p className="text-[10px] font-black text-stone-400 uppercase tracking-widest mb-1">Очікуваний Дохід</p>
-                            <p className="text-3xl font-black text-green-600">{stats.income} ₴</p>
-                        </div>
-                        <div className="glass-card p-8 rounded-[2.5rem] border-white">
-                            <p className="text-[10px] font-black text-stone-400 uppercase tracking-widest mb-1">Нові Запити</p>
-                            <p className="text-3xl font-black text-rose-500">{stats.pendingCount}</p>
-                        </div>
-                        <div className="glass-card p-8 rounded-[2.5rem] border-white">
-                            <p className="text-[10px] font-black text-stone-400 uppercase tracking-widest mb-1">Всього Клієнтів</p>
-                            <p className="text-3xl font-black">{new Set(appointments.map(a=>a.userId)).size}</p>
-                        </div>
-                        <div className="bg-stone-900 text-white p-8 rounded-[2.5rem] shadow-2xl">
-                            <p className="text-[10px] font-black text-stone-500 uppercase tracking-widest mb-1">Сьогодні</p>
-                            <p className="text-3xl font-black">{appointments.filter(a=>a.date===selectedDate && a.status==='confirmed').length} сесій</p>
-                        </div>
-                    </div>
-
-                    {/* Controls Nav */}
-                    <div className="flex bg-stone-100 p-1.5 rounded-2xl w-fit gap-1 mx-auto">
-                        {['timeline', 'requests', 'settings'].map(t => (
-                            <button key={t} onClick={() => setTab(t)} className={`px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${tab===t ? 'bg-white text-stone-900 shadow-md' : 'text-stone-400 hover:text-stone-600'}`}>
-                                {t === 'timeline' ? 'Розклад' : t === 'requests' ? 'Запити' : 'Система'}
+                <div className="space-y-10 animate-fade">
+                    <div className="flex bg-stone-100 p-1.5 rounded-2xl w-fit gap-1 mx-auto overflow-x-auto no-scrollbar">
+                        {['daily', 'users', 'services', 'studio'].map(t => (
+                            <button key={t} onClick={() => setTab(t)} className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all ${tab===t?'bg-white text-stone-900 shadow-md':'text-stone-400'}`}>
+                                {t==='daily'?'Розклад':t==='users'?'Клієнти':t==='services'?'Прайс':'Моя Студія'}
                             </button>
                         ))}
                     </div>
 
-                    {tab === 'timeline' && (
+                    {tab === 'daily' && (
                         <div className="grid lg:grid-cols-2 gap-10">
-                            {/* Schedule Grid */}
-                            <div className="bg-white p-10 rounded-[3rem] border border-stone-100 shadow-sm">
-                                <h3 className="text-2xl font-black mb-8 flex items-center gap-3">
-                                    <span className="w-2 h-8 bg-rose-500 rounded-full"></span> Управління Днем
-                                </h3>
-                                <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} className="w-full p-4 bg-stone-50 rounded-2xl outline-none font-bold mb-8" />
-                                
-                                <div className="space-y-4">
-                                    {(scheduleConfig[selectedDate] || TIME_SLOTS_BASE).map(t => {
-                                        const app = appointments.find(a => a.date === selectedDate && a.time === t && (a.status === 'confirmed' || a.status === 'pending'));
+                            <div className="bg-white p-8 rounded-[3rem] shadow-sm border space-y-6">
+                                <h3 className="text-2xl font-black">Управління Днем</h3>
+                                <input type="date" value={date} onChange={e=>setDate(e.target.value)} className="w-full p-4 bg-stone-50 rounded-2xl font-bold" />
+                                <div className="space-y-3">
+                                    {(scheduleConfig[date] || ["09:00","11:30","14:00","16:30","19:00"]).map(t => {
+                                        const app = appointments.find(a => a.date === date && a.time === t && a.status !== 'rejected');
                                         return (
-                                            <div key={t} className={`group flex items-center justify-between p-5 rounded-2xl border transition-all ${app ? 'bg-stone-900 text-white' : 'bg-stone-50 border-transparent hover:border-rose-100'}`}>
-                                                <div className="flex items-center gap-6">
-                                                    <span className="font-black text-lg">{t}</span>
-                                                    {app ? (
-                                                        <div className="flex flex-col">
-                                                            <span className="text-xs font-black uppercase tracking-widest text-rose-400 leading-none mb-1">{app.service}</span>
-                                                            <span className="text-sm font-bold opacity-70">@{app.instagram}</span>
-                                                        </div>
-                                                    ) : (
-                                                        <span className="text-xs font-black uppercase tracking-widest text-stone-300">Вільний слот</span>
-                                                    )}
-                                                </div>
-                                                <div className="flex gap-2">
-                                                    {!app && <button onClick={() => modifySchedule(selectedDate, t, true)} className="p-2 text-stone-200 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity">Блокувати</button>}
-                                                    {app?.status === 'pending' && <button onClick={() => updateStatus(app.id, 'confirmed')} className="bg-rose-500 px-4 py-2 rounded-lg text-[10px] font-black">Підтвердити</button>}
-                                                </div>
+                                            <div key={t} className={`p-5 rounded-2xl border flex justify-between items-center ${app?'bg-stone-900 text-white':'bg-stone-50'}`}>
+                                                <span className="font-black">{t}</span>
+                                                {app ? (
+                                                    <div className="text-right">
+                                                        <p className="text-xs font-black uppercase text-rose-400">{app.service}</p>
+                                                        <button onClick={()=>setSelUser(usersList.find(u=>u.uid===app.userId))} className="text-[10px] font-bold opacity-60 hover:opacity-100">@{app.instagram} →</button>
+                                                        {app.status === 'pending' && (
+                                                            <div className="flex gap-2 mt-2">
+                                                                <button onClick={()=>updateStatus(app.id, 'confirmed')} className="bg-green-500 text-white px-3 py-1 rounded text-[8px] font-black">ОК</button>
+                                                                <button onClick={()=>updateStatus(app.id, 'rejected')} className="bg-white/20 text-white px-3 py-1 rounded text-[8px] font-black">X</button>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <button onClick={async ()=>{
+                                                        const current = scheduleConfig[date] || ["09:00","11:30","14:00","16:30","19:00"];
+                                                        await db.collection("settings").doc("schedule").set({[date]: current.filter(slot => slot !== t)}, {merge:true});
+                                                    }} className="text-[10px] font-black text-stone-300 uppercase">Закрити слот</button>
+                                                )}
                                             </div>
                                         );
                                     })}
-                                    <div className="pt-6 border-t border-stone-100 flex gap-2">
-                                        <input type="time" id="add-time" className="flex-1 p-4 bg-stone-50 rounded-2xl outline-none" />
-                                        <button onClick={() => {
-                                            const v = document.getElementById('add-time').value;
-                                            if(v) modifySchedule(selectedDate, v);
-                                        }} className="bg-stone-900 text-white px-8 rounded-2xl font-black">+</button>
-                                    </div>
                                 </div>
                             </div>
-
-                            {/* Daily Queue Details */}
                             <div className="space-y-6">
-                                <h3 className="text-2xl font-black">Сьогоднішні Візити</h3>
-                                {appointments.filter(a => a.date === selectedDate && a.status === 'confirmed').map(a => (
-                                    <div key={a.id} className="bg-white p-8 rounded-[2.5rem] border border-stone-100 flex items-center justify-between">
-                                        <div className="flex items-center gap-6">
-                                            <div className="text-3xl">💅</div>
-                                            <div>
-                                                <p className="font-black text-xl leading-none mb-1">{a.service}</p>
-                                                <p className="text-xs font-bold text-stone-400 uppercase tracking-widest">@{a.instagram} • {a.time}</p>
-                                            </div>
+                                <h3 className="text-2xl font-black">Нові запити</h3>
+                                {appointments.filter(a=>a.status==='pending').map(a => (
+                                    <div key={a.id} className="bg-white p-6 rounded-3xl border-2 border-rose-100 flex justify-between items-center">
+                                        <div>
+                                            <p className="font-black text-lg">{a.service}</p>
+                                            <p className="text-xs font-bold text-stone-400 uppercase">{a.date} о {a.time} • @{a.instagram}</p>
                                         </div>
-                                        <button onClick={() => updateStatus(a.id, 'cancelled')} className="p-2 text-stone-200 hover:text-rose-500 transition-colors">Скасувати</button>
+                                        <button onClick={()=>updateStatus(a.id, 'confirmed')} className="bg-rose-500 text-white px-6 py-2 rounded-xl font-black text-[10px] uppercase">Прийняти</button>
                                     </div>
                                 ))}
                             </div>
                         </div>
                     )}
 
-                    {tab === 'requests' && (
-                        <div className="grid md:grid-cols-2 gap-6">
-                            {appointments.filter(a => a.status === 'pending').map(a => (
-                                <div key={a.id} className="bg-white p-10 rounded-[3rem] border border-stone-100 shadow-sm space-y-8 animate-in slide-in-from-bottom duration-500">
+                    {tab === 'users' && (
+                        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {usersList.map(u => (
+                                <div key={u.uid} className="bg-white p-6 rounded-3xl border shadow-sm space-y-4">
                                     <div className="flex justify-between items-start">
                                         <div>
-                                            <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest mb-1">Запит на бронювання</p>
-                                            <h4 className="text-3xl font-black">{a.service}</h4>
+                                            <p className="font-black text-lg">@{u.instagram || 'NoName'}</p>
+                                            <p className="text-[10px] text-stone-400 font-bold truncate max-w-[150px]">{u.email}</p>
                                         </div>
-                                        <div className="text-right">
-                                            <p className="text-xl font-black">{a.time}</p>
-                                            <p className="text-xs font-bold text-stone-400 uppercase">{a.date}</p>
+                                        <div className="flex flex-col gap-1">
+                                            {u.isVIP && <span className="text-[8px] bg-amber-100 text-amber-600 px-2 py-0.5 rounded font-black uppercase">VIP</span>}
+                                            {u.isBlacklisted && <span className="text-[8px] bg-red-100 text-red-600 px-2 py-0.5 rounded font-black uppercase">BLOCKED</span>}
                                         </div>
                                     </div>
-                                    <div className="bg-stone-50 p-6 rounded-2xl flex justify-between items-center">
-                                        <div>
-                                            <p className="text-xs font-black uppercase text-stone-300">Клієнт</p>
-                                            <p className="font-black text-lg">@{a.instagram}</p>
-                                            <p className="text-[10px] text-stone-400">{a.userEmail}</p>
-                                        </div>
-                                        <div className="w-12 h-12 bg-white rounded-xl shadow-sm border border-stone-100 flex items-center justify-center">📱</div>
-                                    </div>
-                                    <div className="flex gap-3">
-                                        <button onClick={() => updateStatus(a.id, 'confirmed')} className="flex-[2] bg-rose-500 text-white py-5 rounded-2xl font-black shadow-xl shadow-rose-200 hover:bg-rose-600 transition-all">Прийняти</button>
-                                        <button onClick={() => updateStatus(a.id, 'rejected')} className="flex-1 bg-stone-100 text-stone-400 py-5 rounded-2xl font-black hover:bg-stone-200 transition-all">Відхилити</button>
+                                    <div className="flex gap-2">
+                                        <button onClick={()=>setSelUser(u)} className="flex-1 bg-stone-100 py-2 rounded-xl text-[10px] font-black uppercase">Історія</button>
+                                        <button onClick={()=>toggleUserFlag(u.uid, 'isBlacklisted', u.isBlacklisted)} className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase ${u.isBlacklisted?'bg-green-100 text-green-600':'bg-red-100 text-red-600'}`}>
+                                            {u.isBlacklisted?'Unblock':'Block'}
+                                        </button>
+                                        <button onClick={()=>toggleUserFlag(u.uid, 'isVIP', u.isVIP)} className="bg-amber-100 text-amber-600 px-3 py-2 rounded-xl text-[10px] font-black">⭐</button>
                                     </div>
                                 </div>
                             ))}
-                            {appointments.filter(a => a.status === 'pending').length === 0 && (
-                                <div className="md:col-span-2 p-32 text-center border-2 border-dashed rounded-[4rem] text-stone-300 font-black italic">Наразі немає нових запитів</div>
-                            )}
                         </div>
                     )}
 
-                    {tab === 'settings' && (
-                        <div className="max-w-2xl mx-auto space-y-10">
-                            <div className="bg-white p-10 rounded-[3rem] border shadow-sm space-y-8">
-                                <h3 className="text-2xl font-black">Прайс Послуг</h3>
+                    {tab === 'services' && (
+                        <div className="max-w-2xl mx-auto bg-white p-10 rounded-[3rem] border shadow-sm space-y-8">
+                            <h3 className="text-2xl font-black">Управління послугами</h3>
+                            <div className="space-y-3">
+                                {services.map((s, idx) => (
+                                    <div key={idx} className="flex justify-between items-center p-4 bg-stone-50 rounded-2xl">
+                                        <div>
+                                            <p className="font-black">{s.name}</p>
+                                            <p className="text-xs font-bold text-rose-500">{s.price} ₴</p>
+                                        </div>
+                                        <button onClick={async ()=>{
+                                            const newList = services.filter((_, i) => i !== idx);
+                                            await db.collection("settings").doc("services").set({list: newList});
+                                        }} className="text-rose-500 font-black text-xs">Видалити</button>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="pt-6 border-t space-y-4">
+                                <input id="new-serv-name" placeholder="Назва послуги" className="w-full p-4 bg-stone-50 rounded-xl outline-none" />
+                                <input id="new-serv-price" type="number" placeholder="Ціна ₴" className="w-full p-4 bg-stone-50 rounded-xl outline-none" />
+                                <button onClick={async ()=>{
+                                    const n = document.getElementById('new-serv-name').value;
+                                    const p = document.getElementById('new-serv-price').value;
+                                    if(!n || !p) return;
+                                    await db.collection("settings").doc("services").set({list: [...services, {id:Date.now().toString(), name:n, price:Number(p), category:'Common', duration:'1.5 год'}]}, {merge:true});
+                                    document.getElementById('new-serv-name').value = '';
+                                    document.getElementById('new-serv-price').value = '';
+                                }} className="w-full bg-stone-900 text-white py-4 rounded-xl font-black">Додати послугу</button>
+                            </div>
+                        </div>
+                    )}
+
+                    {tab === 'studio' && (
+                        <div className="max-w-2xl mx-auto bg-white p-10 rounded-[3rem] border shadow-sm space-y-8">
+                            <h3 className="text-2xl font-black">Редактор Студії</h3>
+                            <div className="space-y-4">
+                                <div className="space-y-2">
+                                    <label className="text-xs font-black uppercase text-stone-400 ml-2">Головний Заголовок</label>
+                                    <input value={studioData.heroTitle} onChange={e=>setStudioData({...studioData, heroTitle: e.target.value})} className="w-full p-4 bg-stone-50 rounded-xl outline-none border focus:border-rose-500" />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-xs font-black uppercase text-stone-400 ml-2">Підзаголовок</label>
+                                    <input value={studioData.heroSub} onChange={e=>setStudioData({...studioData, heroSub: e.target.value})} className="w-full p-4 bg-stone-50 rounded-xl outline-none border focus:border-rose-500" />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-xs font-black uppercase text-stone-400 ml-2">Посилання на Відео (Instagram/YouTube)</label>
+                                    <input value={studioData.videoUrl} onChange={e=>setStudioData({...studioData, videoUrl: e.target.value})} className="w-full p-4 bg-stone-50 rounded-xl outline-none border focus:border-rose-500" />
+                                </div>
+                                <button onClick={()=>db.collection("settings").doc("studio").set(studioData)} className="w-full bg-rose-500 text-white py-4 rounded-xl font-black">Оновити сторінку</button>
+                            </div>
+                        </div>
+                    )}
+
+                    {selUser && (
+                        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-md z-[200] flex items-center justify-center p-6">
+                            <div className="bg-white w-full max-w-lg rounded-[3rem] p-10 relative max-h-[80vh] overflow-y-auto">
+                                <button onClick={()=>setSelUser(null)} className="absolute top-8 right-8 text-stone-300 font-black">✕</button>
+                                <h2 className="text-2xl font-black mb-6">@{selUser.instagram} <span className="text-stone-300 text-sm font-normal">({selUser.email})</span></h2>
                                 <div className="space-y-4">
-                                    {services.map(s => (
-                                        <div key={s.id} className="flex items-center justify-between p-5 bg-stone-50 rounded-2xl">
-                                            <div className="flex items-center gap-4">
-                                                <span className="font-black text-lg">{s.name}</span>
-                                                <span className="text-[10px] bg-white px-2 py-1 rounded-md font-black uppercase text-stone-400">{s.category}</span>
+                                    <p className="text-[10px] font-black uppercase text-stone-400 border-b pb-2">Історія записів</p>
+                                    {appointments.filter(a=>a.userId===selUser.uid).sort((a,b)=>new Date(b.date)-new Date(a.date)).map(a => (
+                                        <div key={a.id} className="p-4 bg-stone-50 rounded-2xl flex justify-between items-center">
+                                            <div>
+                                                <p className="font-black text-sm">{a.service}</p>
+                                                <p className="text-[10px] font-bold text-stone-400 uppercase">{a.date} | {a.time}</p>
                                             </div>
-                                            <span className="font-black text-rose-500">{s.price} ₴</span>
+                                            <span className={`text-[8px] font-black uppercase px-2 py-1 rounded ${a.status==='confirmed'?'bg-green-100 text-green-600':'bg-stone-200 text-stone-500'}`}>{a.status}</span>
                                         </div>
                                     ))}
+                                    {appointments.filter(a=>a.userId===selUser.uid).length === 0 && <p className="text-stone-300 italic text-center py-10">Немає записів</p>}
                                 </div>
-                                <button className="w-full bg-stone-900 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest opacity-50 cursor-not-allowed">Додати Послугу (coming soon)</button>
-                            </div>
-
-                            <div className="bg-rose-50 p-10 rounded-[3rem] border border-rose-100 space-y-4">
-                                <h3 className="text-2xl font-black text-rose-900 italic font-serif leading-none uppercase">Blacklist Control</h3>
-                                <p className="text-rose-700 text-sm font-medium">Керування доступом клієнтів за їхнім ID або Instagram. Обмежуйте недобросовісних відвідувачів.</p>
-                                <button className="bg-rose-500 text-white px-8 py-3 rounded-xl font-black text-xs uppercase tracking-widest">Переглянути базу</button>
                             </div>
                         </div>
                     )}
@@ -674,25 +503,17 @@
             };
 
             return (
-                <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-xl z-[200] flex items-center justify-center p-6 animate-in fade-in duration-300">
-                    <div className="bg-white w-full max-w-sm rounded-[3rem] p-10 md:p-14 shadow-2xl relative overflow-hidden">
+                <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-xl z-[200] flex items-center justify-center p-6 animate-fade">
+                    <div className="bg-white w-full max-w-sm rounded-[3rem] p-10 shadow-2xl relative overflow-hidden">
                         <div className="absolute top-0 left-0 w-full h-2 bg-rose-500"></div>
-                        <button onClick={onClose} className="absolute top-8 right-8 text-stone-300 hover:text-stone-900 transition-colors">✕</button>
-                        <h2 className="text-4xl font-black mb-10 tracking-tighter">{isReg ? 'Elite Registration' : 'Welcome Back'}</h2>
+                        <button onClick={onClose} className="absolute top-8 right-8 text-stone-300">✕</button>
+                        <h2 className="text-3xl font-black mb-8">{isReg ? 'Elite Club' : 'Welcome Back'}</h2>
                         <form className="space-y-4" onSubmit={handleAuth}>
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black uppercase text-stone-400 ml-2 tracking-widest">Email Address</label>
-                                <input type="email" placeholder="client@nail.com" required className="w-full p-5 bg-stone-50 rounded-2xl outline-none border-2 border-transparent focus:border-rose-500 transition-all font-bold" value={email} onChange={e => setEmail(e.target.value)} />
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black uppercase text-stone-400 ml-2 tracking-widest">Password Key</label>
-                                <input type="password" placeholder="••••••••" required className="w-full p-5 bg-stone-50 rounded-2xl outline-none border-2 border-transparent focus:border-rose-500 transition-all font-bold" value={pass} onChange={e => setPass(e.target.value)} />
-                            </div>
-                            <button className="w-full bg-stone-900 text-white py-5 rounded-[2rem] font-black text-lg shadow-xl hover:bg-rose-500 transition-all mt-6">{isReg ? 'Створити акаунт' : 'Увійти'}</button>
+                            <input type="email" placeholder="Email" required className="w-full p-4 bg-stone-50 rounded-2xl outline-none" value={email} onChange={e => setEmail(e.target.value)} />
+                            <input type="password" placeholder="Пароль" required className="w-full p-4 bg-stone-50 rounded-2xl outline-none" value={pass} onChange={e => setPass(e.target.value)} />
+                            <button className="w-full bg-stone-900 text-white py-4 rounded-2xl font-black shadow-lg">{isReg ? 'Створити акаунт' : 'Увійти'}</button>
                         </form>
-                        <button onClick={() => setIsReg(!isReg)} className="w-full mt-10 text-[10px] font-black text-stone-300 uppercase tracking-widest hover:text-stone-900 transition-colors">
-                            {isReg ? 'Вже є акаунт? Увійти' : 'Вперше у нас? Зареєструватися'}
-                        </button>
+                        <button onClick={() => setIsReg(!isReg)} className="w-full mt-6 text-[10px] font-black text-stone-300 uppercase tracking-widest">{isReg ? 'Вже є акаунт? Увійти' : 'Вперше у нас? Реєстрація'}</button>
                     </div>
                 </div>
             );
