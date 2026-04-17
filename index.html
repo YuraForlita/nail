@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NailArt Studio Pro - Advanced</title>
+    <title>NailArt Pro - Studio Management</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
@@ -16,18 +16,20 @@
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,700;1,700&display=swap');
-        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #fdfcfb; }
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #fdfcfb; color: #1c1917; }
         .font-serif { font-family: 'Playfair Display', serif; }
-        .glass { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); }
+        .glass { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
         .no-scrollbar::-webkit-scrollbar { display: none; }
-        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); }
+        .animated-gradient { background: linear-gradient(270deg, #ffedd5, #fce7f3, #fdfcfb); background-size: 600% 600%; animation: grad 15s ease infinite; }
+        @keyframes grad { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
+        .mobile-nav { box-shadow: 0 -4px 20px rgba(0,0,0,0.05); }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
     <script type="text/babel">
-        // --- CONFIG ---
+        // --- FIREBASE CONFIG ---
         const firebaseConfig = {
         apiKey: "AIzaSyDaE80NIYOWs7f9FZ2lxK_6dbocBsrgqmg",
         authDomain: "nail-e8a3c.firebaseapp.com",
@@ -37,32 +39,32 @@
         appId: "1:1064829438247:web:75278e58ed0c259d720102",
         measurementId: "G-SSVYQB90HH"
         };
-        const isConfigReady = firebaseConfig.apiKey !== "";
-        if (isConfigReady) firebase.initializeApp(firebaseConfig);
+
+        if (firebaseConfig.apiKey !== "") firebase.initializeApp(firebaseConfig);
 
         const { useState, useEffect, useMemo } = React;
 
-        const DEFAULT_TIME_SLOTS = ["09:00", "11:00", "13:00", "15:00", "17:00", "19:00"];
-        const ADMIN_EMAIL = "admin@nail.com"; 
-
         const SERVICES = [
-            { id: 1, name: "Естетичний манікюр", price: 500 },
-            { id: 2, name: "Покриття гель-лаком", price: 750 },
-            { id: 3, name: "Нарощування нігтів", price: 1100 }
+            { id: 1, name: "Естетичний манікюр", price: 500, icon: "💅" },
+            { id: 2, name: "Покриття гель-лаком", price: 750, icon: "✨" },
+            { id: 3, name: "Нарощування нігтів", price: 1100, icon: "💎" },
+            { id: 4, name: "SPA-догляд рук", price: 400, icon: "🌿" }
         ];
+
+        const DEFAULT_SLOTS = ["09:00", "11:30", "14:00", "16:30", "19:00"];
+        const ADMIN_EMAIL = "admin@nail.com";
 
         function App() {
             const [user, setUser] = useState(null);
-            const [profile, setProfile] = useState({ instagram: '' });
+            const [profile, setProfile] = useState({ instagram: '', isBlacklisted: false });
             const [isAdmin, setIsAdmin] = useState(false);
             const [view, setView] = useState('home'); 
             const [appointments, setAppointments] = useState([]);
-            const [customSchedule, setCustomSchedule] = useState({}); // { "2023-10-25": ["10:00", "12:00"] }
+            const [customSchedule, setCustomSchedule] = useState({});
             const [loading, setLoading] = useState(true);
             const [showLogin, setShowLogin] = useState(false);
 
             useEffect(() => {
-                if (!isConfigReady) return;
                 const unsubscribe = firebase.auth().onAuthStateChanged(async (u) => {
                     if (u) {
                         setUser(u);
@@ -72,7 +74,7 @@
                     } else {
                         setUser(null);
                         setIsAdmin(false);
-                        setProfile({ instagram: '' });
+                        setProfile({ instagram: '', isBlacklisted: false });
                     }
                     setLoading(false);
                 });
@@ -80,49 +82,50 @@
             }, []);
 
             useEffect(() => {
-                if (!user || !isConfigReady) return;
+                if (!user) return;
                 const db = firebase.firestore();
-                
-                const unsubApps = db.collection("appointments").onSnapshot(snap => {
-                    const data = snap.docs.map(d => ({id: d.id, ...d.data()}));
-                    setAppointments(data);
-                });
-
-                const unsubSchedule = db.collection("settings").doc("custom_schedule").onSnapshot(doc => {
-                    if (doc.exists) setCustomSchedule(doc.data());
-                });
-
-                return () => { unsubApps(); unsubSchedule(); };
+                const unsubApps = db.collection("appointments").onSnapshot(s => setAppointments(s.docs.map(d => ({id:d.id, ...d.data()}))));
+                const unsubSch = db.collection("settings").doc("schedule").onSnapshot(d => d.exists && setCustomSchedule(d.data()));
+                return () => { unsubApps(); unsubSch(); };
             }, [user]);
 
-            if (!isConfigReady) return <div className="p-20 text-center">Налаштуйте Firebase Config</div>;
-            if (loading) return <div className="h-screen flex items-center justify-center font-black animate-pulse text-pink-500">NailArt Pro...</div>;
+            if (loading) return <div className="h-screen flex items-center justify-center font-black animate-pulse text-pink-500">NailArt Pro Studio...</div>;
 
             return (
-                <div className="min-h-screen pb-20">
-                    <nav className="sticky top-0 z-50 glass border-b border-stone-100 px-6 h-20 flex items-center justify-between">
-                        <div className="flex items-center gap-3 cursor-pointer" onClick={() => setView('home')}>
-                            <div className="w-10 h-10 bg-pink-500 rounded-xl flex items-center justify-center text-white font-bold">N</div>
-                            <span className="text-xl font-black tracking-tighter uppercase">NailArt <span className="text-pink-500 font-serif lowercase italic font-normal">pro</span></span>
-                        </div>
-
-                        <div className="hidden md:flex items-center gap-8 text-[10px] font-black uppercase tracking-widest">
-                            <button onClick={() => setView('home')} className={view==='home'?'text-pink-500':'text-stone-400'}>Головна</button>
-                            <button onClick={() => setView('booking')} className={view==='booking'?'text-pink-500':'text-stone-400'}>Запис</button>
-                            {user && !isAdmin && <button onClick={() => setView('cabinet')} className={view==='cabinet'?'text-pink-500':'text-stone-400'}>Кабінет</button>}
-                            {isAdmin && <button onClick={() => setView('admin')} className="bg-stone-900 text-white px-4 py-2 rounded-lg">Адмін Панель</button>}
-                        </div>
-
-                        <div className="flex items-center gap-4">
-                            {!user ? (
-                                <button onClick={() => setShowLogin(true)} className="bg-pink-500 text-white px-6 py-2 rounded-full font-bold text-sm">Вхід</button>
-                            ) : (
-                                <button onClick={() => firebase.auth().signOut()} className="text-stone-400 hover:text-red-500 transition font-black text-[10px] uppercase">Вихід</button>
-                            )}
+                <div className="min-h-screen pb-24 md:pb-0">
+                    {/* Desktop Navigation */}
+                    <nav className="sticky top-0 z-50 glass border-b border-stone-100 hidden md:block">
+                        <div className="max-w-6xl mx-auto px-6 h-20 flex items-center justify-between">
+                            <div className="flex items-center gap-3 cursor-pointer" onClick={() => setView('home')}>
+                                <div className="w-10 h-10 bg-stone-900 rounded-xl flex items-center justify-center text-white font-bold">N</div>
+                                <span className="text-xl font-black tracking-tighter uppercase">NailArt <span className="text-pink-500 font-serif lowercase italic font-normal">pro</span></span>
+                            </div>
+                            <div className="flex items-center gap-10 text-[10px] font-black uppercase tracking-[0.2em]">
+                                <button onClick={() => setView('home')} className={view==='home'?'text-pink-500':'text-stone-400'}>Головна</button>
+                                <button onClick={() => setView('booking')} className={view==='booking'?'text-pink-500':'text-stone-400'}>Запис</button>
+                                {user && !isAdmin && <button onClick={() => setView('cabinet')} className={view==='cabinet'?'text-pink-500':'text-stone-400'}>Мій Кабінет</button>}
+                                {isAdmin && <button onClick={() => setView('admin')} className="bg-stone-900 text-white px-5 py-2 rounded-lg">Кабінет Майстра</button>}
+                            </div>
+                            <div className="flex items-center gap-4">
+                                {!user ? <button onClick={() => setShowLogin(true)} className="bg-pink-500 text-white px-6 py-2 rounded-full font-bold text-sm">Увійти</button> : 
+                                <button onClick={() => firebase.auth().signOut()} className="text-stone-300 hover:text-red-500 font-bold text-xs">Вихід</button>}
+                            </div>
                         </div>
                     </nav>
 
-                    <main className="max-w-6xl mx-auto p-6">
+                    {/* Mobile Floating Nav */}
+                    <nav className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] md:hidden glass px-6 py-4 rounded-3xl mobile-nav flex items-center gap-10 border border-white/50">
+                        <button onClick={() => setView('home')} className={view==='home'?'text-pink-500':'text-stone-400'}><IconHome/></button>
+                        <button onClick={() => setView('booking')} className={view==='booking'?'text-pink-500':'text-stone-400'}><IconCalendar/></button>
+                        {user && (
+                            <button onClick={() => setView(isAdmin ? 'admin' : 'cabinet')} className={['cabinet','admin'].includes(view)?'text-pink-500':'text-stone-400'}>
+                                {isAdmin ? <IconShield/> : <IconUser/>}
+                            </button>
+                        )}
+                        {!user && <button onClick={() => setShowLogin(true)} className="text-stone-400"><IconLogin/></button>}
+                    </nav>
+
+                    <main className="max-w-6xl mx-auto p-4 md:p-8">
                         {view === 'home' && <HomeView setView={setView} />}
                         {view === 'booking' && (
                             <BookingView 
@@ -130,41 +133,16 @@
                                 profile={profile} 
                                 appointments={appointments}
                                 customSchedule={customSchedule}
-                                onBook={async (data) => {
-                                    await firebase.firestore().collection("appointments").add({...data, status: 'pending', createdAt: new Date().toISOString()});
+                                onBook={async (d) => {
+                                    if(profile.isBlacklisted) return alert("Вибачте, запис недоступний.");
+                                    await firebase.firestore().collection("appointments").add({...d, status: 'pending', createdAt: new Date().toISOString()});
                                     setView('cabinet');
                                 }}
-                                onOpenLogin={() => setShowLogin(true)}
+                                onLogin={() => setShowLogin(true)}
                             />
                         )}
-                        {view === 'cabinet' && user && (
-                            <CabinetView 
-                                user={user} 
-                                profile={profile} 
-                                appointments={appointments.filter(a => a.userId === user.uid)}
-                                onUpdateProfile={async (data) => {
-                                    // Перевірка на унікальність ніку
-                                    const snapshot = await firebase.firestore().collection("users").where("instagram", "==", data.instagram).get();
-                                    if (!snapshot.empty && snapshot.docs[0].id !== user.uid) {
-                                        alert("Цей Instagram вже використовується іншим клієнтом!");
-                                        return;
-                                    }
-                                    await firebase.firestore().collection("users").doc(user.uid).set(data, {merge: true});
-                                    setProfile(data);
-                                    alert("Профіль оновлено!");
-                                }}
-                            />
-                        )}
-                        {view === 'admin' && isAdmin && (
-                            <AdminPanel 
-                                appointments={appointments} 
-                                customSchedule={customSchedule}
-                                onUpdateStatus={(id, s) => firebase.firestore().collection("appointments").doc(id).update({status: s})}
-                                onUpdateSchedule={async (date, slots) => {
-                                    await firebase.firestore().collection("settings").doc("custom_schedule").set({ [date]: slots }, {merge: true});
-                                }}
-                            />
-                        )}
+                        {view === 'cabinet' && user && <CabinetView user={user} profile={profile} appointments={appointments.filter(a=>a.userId===user.uid)} setProfile={setProfile} />}
+                        {view === 'admin' && isAdmin && <AdminDashboard appointments={appointments} customSchedule={customSchedule} />}
                     </main>
 
                     {showLogin && <LoginModal onClose={() => setShowLogin(false)} />}
@@ -172,312 +150,319 @@
             );
         }
 
-        // --- VIEWS ---
+        // --- COMPONENTS ---
 
         function HomeView({ setView }) {
             return (
-                <div className="py-20 text-center space-y-8">
-                    <h1 className="text-7xl font-black leading-none">Твоя ідеальна <br/><span className="text-pink-500 font-serif italic">краса</span> тут</h1>
-                    <p className="max-w-xl mx-auto text-stone-400">Професійний манікюр з гарантією якості та стерильності. Записуйся онлайн у декілька кліків.</p>
-                    <button onClick={() => setView('booking')} className="bg-stone-900 text-white px-12 py-5 rounded-3xl font-bold shadow-xl hover:scale-105 transition">Записатись зараз</button>
+                <div className="space-y-24 py-8">
+                    {/* Hero Section */}
+                    <section className="relative h-[500px] md:h-[600px] rounded-[3rem] overflow-hidden animated-gradient border border-white shadow-2xl flex items-center px-8 md:px-20">
+                        <div className="max-w-2xl space-y-8 z-10">
+                            <span className="text-pink-500 font-black uppercase tracking-widest text-xs bg-white/50 px-4 py-2 rounded-full">Best Studio 2024</span>
+                            <h1 className="text-5xl md:text-8xl font-black leading-[0.9] tracking-tighter">Мастеринг <br/><span className="text-pink-500 font-serif italic">естетики</span></h1>
+                            <p className="text-stone-600 text-lg md:text-xl font-medium">Створюємо не просто манікюр, а впевненість у кожному русі. Стерильність, якість, преміум матеріали.</p>
+                            <div className="flex flex-col sm:flex-row gap-4">
+                                <button onClick={() => setView('booking')} className="bg-stone-900 text-white px-10 py-5 rounded-2xl font-bold shadow-2xl hover:bg-black transition transform hover:-translate-y-1">Забронювати візит</button>
+                                <button className="bg-white text-stone-900 px-10 py-5 rounded-2xl font-bold hover:shadow-lg transition">Дивитись роботи</button>
+                            </div>
+                        </div>
+                        <div className="absolute right-[-10%] bottom-[-10%] opacity-20 md:opacity-100 md:right-10 md:bottom-10 pointer-events-none">
+                             <div className="w-80 h-80 bg-pink-200 rounded-full blur-[100px]"></div>
+                        </div>
+                    </section>
+
+                    {/* Services Feature */}
+                    <section className="grid md:grid-cols-4 gap-8">
+                        {SERVICES.map(s => (
+                            <div key={s.id} className="bg-white p-8 rounded-3xl shadow-sm border border-stone-50 hover:shadow-md transition">
+                                <div className="text-3xl mb-4">{s.icon}</div>
+                                <h3 className="font-black text-lg mb-1">{s.name}</h3>
+                                <p className="text-stone-400 text-xs font-bold uppercase mb-4 tracking-wider">від {s.price} грн</p>
+                                <button onClick={() => setView('booking')} className="text-pink-500 font-black text-xs uppercase tracking-widest">Записатись →</button>
+                            </div>
+                        ))}
+                    </section>
+
+                    {/* Trust Section */}
+                    <section className="bg-stone-900 text-white rounded-[4rem] p-12 md:p-20 flex flex-col md:flex-row gap-12 items-center">
+                        <div className="flex-1 space-y-6 text-center md:text-left">
+                            <h2 className="text-4xl font-black">Чому обирають нас?</h2>
+                            <div className="grid grid-cols-2 gap-8 text-center md:text-left">
+                                <div><p className="text-3xl font-black text-pink-500">100%</p><p className="text-xs text-stone-400 uppercase font-bold mt-2">Стерильність</p></div>
+                                <div><p className="text-3xl font-black text-pink-500">500+</p><p className="text-xs text-stone-400 uppercase font-bold mt-2">Задоволених клієнтів</p></div>
+                                <div><p className="text-3xl font-black text-pink-500">3 роки</p><p className="text-xs text-stone-400 uppercase font-bold mt-2">Досвіду</p></div>
+                                <div><p className="text-3xl font-black text-pink-500">Lux</p><p className="text-xs text-stone-400 uppercase font-bold mt-2">Матеріали</p></div>
+                            </div>
+                        </div>
+                        <div className="flex-1 text-center font-serif italic text-2xl text-stone-400 leading-relaxed">
+                            "Краса — це сила, а манікюр — це броня. Ми робимо вашу броню досконалою."
+                        </div>
+                    </section>
                 </div>
             );
         }
 
-        function BookingView({ user, profile, appointments, customSchedule, onBook, onOpenLogin }) {
-            const [step, setStep] = useState(1);
-            const [form, setForm] = useState({ service: '', date: '', time: '' });
+        function BookingView({ user, profile, appointments, customSchedule, onBook, onLogin }) {
+            const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+            const [selTime, setSelTime] = useState(null);
+            const [selService, setSelService] = useState(null);
 
-            if (!user) return (
-                <div className="max-w-md mx-auto py-20 text-center space-y-6 bg-white p-12 rounded-[3rem] shadow-sm">
-                    <div className="text-5xl">🔐</div>
-                    <h2 className="text-2xl font-black">Потрібна авторизація</h2>
-                    <p className="text-stone-400 text-sm">Увійдіть у свій акаунт, щоб переглянути доступні години та здійснити запис.</p>
-                    <button onClick={onOpenLogin} className="w-full bg-pink-500 text-white py-4 rounded-2xl font-bold">Увійти</button>
-                </div>
-            );
+            if (!user) return <div className="text-center py-20"><button onClick={onLogin} className="bg-pink-500 text-white px-10 py-5 rounded-2xl font-bold">Увійдіть для запису</button></div>;
 
-            const getSlotsForDate = (date) => {
-                return customSchedule[date] || DEFAULT_TIME_SLOTS;
-            };
-
-            const isBooked = (date, time) => {
-                return appointments.some(a => a.date === date && a.time === time && (a.status === 'confirmed' || a.status === 'pending'));
-            };
+            const slots = customSchedule[date] || DEFAULT_SLOTS;
+            const isTaken = (t) => appointments.some(a => a.date === date && a.time === t && ['confirmed', 'pending'].includes(a.status));
 
             return (
-                <div className="max-w-xl mx-auto bg-white p-10 rounded-[3rem] shadow-sm border border-stone-50">
-                    <div className="flex gap-2 mb-8">
-                        {[1, 2, 3].map(i => <div key={i} className={`h-1.5 flex-1 rounded-full ${step >= i ? 'bg-pink-500' : 'bg-stone-100'}`}></div>)}
+                <div className="max-w-2xl mx-auto space-y-8">
+                    <h2 className="text-3xl font-black text-center">Швидкий запис</h2>
+                    <div className="bg-white p-8 rounded-[3rem] shadow-sm border border-stone-100 space-y-8">
+                        <section>
+                            <label className="text-[10px] font-black uppercase text-stone-400 ml-4 mb-2 block">1. Послуга</label>
+                            <div className="grid grid-cols-2 gap-2">
+                                {SERVICES.map(s => (
+                                    <button key={s.id} onClick={() => setSelService(s)} className={`p-4 rounded-2xl border-2 transition text-left ${selService?.id === s.id ? 'border-pink-500 bg-pink-50' : 'border-stone-50'}`}>
+                                        <div className="text-xl mb-1">{s.icon}</div>
+                                        <div className="font-bold text-sm">{s.name}</div>
+                                    </button>
+                                ))}
+                            </div>
+                        </section>
+
+                        <section>
+                            <label className="text-[10px] font-black uppercase text-stone-400 ml-4 mb-2 block">2. День</label>
+                            <input type="date" value={date} min={new Date().toISOString().split('T')[0]} onChange={e => setDate(e.target.value)} className="w-full p-4 bg-stone-50 rounded-2xl outline-none" />
+                        </section>
+
+                        <section>
+                            <label className="text-[10px] font-black uppercase text-stone-400 ml-4 mb-2 block">3. Час</label>
+                            <div className="grid grid-cols-3 gap-2">
+                                {slots.map(t => {
+                                    const taken = isTaken(t);
+                                    return (
+                                        <button key={t} disabled={taken} onClick={() => setSelTime(t)} className={`p-4 rounded-xl font-black text-xs transition ${taken ? 'bg-stone-50 text-stone-200' : selTime === t ? 'bg-pink-500 text-white shadow-lg shadow-pink-100' : 'bg-stone-100 hover:bg-stone-200'}`}>
+                                            {taken ? 'Зайнято' : t}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </section>
+
+                        <button 
+                            disabled={!selTime || !selService} 
+                            onClick={() => onBook({service: selService.name, date, time: selTime, userId: user.uid, instagram: profile.instagram, userEmail: user.email})}
+                            className="w-full bg-stone-900 text-white py-5 rounded-2xl font-black disabled:opacity-30 transition hover:bg-black"
+                        >
+                            Підтвердити запис
+                        </button>
                     </div>
-
-                    {step === 1 && (
-                        <div className="space-y-4">
-                            <h2 className="text-2xl font-black">Оберіть послугу</h2>
-                            {SERVICES.map(s => (
-                                <button key={s.id} onClick={() => {setForm({...form, service: s.name}); setStep(2);}} className="w-full p-6 text-left border-2 border-stone-50 rounded-2xl hover:border-pink-500 transition flex justify-between items-center group">
-                                    <span className="font-bold group-hover:text-pink-500">{s.name}</span>
-                                    <span className="font-black text-stone-300">{s.price} ₴</span>
-                                </button>
-                            ))}
-                        </div>
-                    )}
-
-                    {step === 2 && (
-                        <div className="space-y-6">
-                            <h2 className="text-2xl font-black">Дата та час</h2>
-                            <input type="date" min={new Date().toISOString().split('T')[0]} className="w-full p-4 bg-stone-50 rounded-xl outline-none" onChange={e => setForm({...form, date: e.target.value})} />
-                            {form.date && (
-                                <div className="grid grid-cols-3 gap-2">
-                                    {getSlotsForDate(form.date).map(t => {
-                                        const booked = isBooked(form.date, t);
-                                        return (
-                                            <button key={t} disabled={booked} onClick={() => setForm({...form, time: t})} className={`p-3 rounded-xl font-bold text-xs ${booked ? 'bg-stone-50 text-stone-200' : form.time === t ? 'bg-pink-500 text-white' : 'bg-stone-100'}`}>
-                                                {booked ? 'Зайнято' : t}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                            <div className="flex gap-4 pt-4">
-                                <button onClick={() => setStep(1)} className="flex-1 font-bold text-stone-300">Назад</button>
-                                <button disabled={!form.time} onClick={() => setStep(3)} className="flex-[2] bg-stone-900 text-white py-4 rounded-xl font-bold disabled:opacity-30">Далі</button>
-                            </div>
-                        </div>
-                    )}
-
-                    {step === 3 && (
-                        <div className="space-y-8 text-center">
-                            <h2 className="text-2xl font-black">Підтвердження</h2>
-                            <div className="bg-stone-50 p-6 rounded-3xl text-left space-y-3">
-                                <p className="text-xs font-black uppercase text-stone-400">Послуга</p>
-                                <p className="font-bold">{form.service}</p>
-                                <p className="text-xs font-black uppercase text-stone-400">Дата та час</p>
-                                <p className="font-bold">{form.date} о {form.time}</p>
-                                <p className="text-xs font-black uppercase text-stone-400">Instagram</p>
-                                <p className="font-bold text-pink-500">@{profile.instagram || 'Вкажіть у профілі'}</p>
-                            </div>
-                            <button onClick={() => onBook({...form, instagram: profile.instagram, userId: user.uid, userEmail: user.email})} className="w-full bg-pink-500 text-white py-4 rounded-2xl font-bold shadow-lg shadow-pink-100">Записатись</button>
-                        </div>
-                    )}
                 </div>
             );
         }
 
-        function CabinetView({ user, profile, appointments, onUpdateProfile }) {
+        function CabinetView({ user, profile, appointments, setProfile }) {
             const [ig, setIg] = useState(profile.instagram || '');
+            
+            const updateIg = async () => {
+                const snap = await firebase.firestore().collection("users").where("instagram", "==", ig).get();
+                if(!snap.empty && snap.docs[0].id !== user.uid) return alert("Цей нік вже зайнятий!");
+                await firebase.firestore().collection("users").doc(user.uid).set({instagram: ig}, {merge: true});
+                setProfile({...profile, instagram: ig});
+                alert("Профіль оновлено");
+            };
+
             return (
-                <div className="grid md:grid-cols-3 gap-10">
-                    <div className="bg-white p-8 rounded-[2.5rem] shadow-sm h-fit space-y-6">
-                        <div className="w-20 h-20 bg-pink-50 text-pink-500 rounded-full flex items-center justify-center text-3xl mx-auto font-serif italic">N</div>
+                <div className="grid md:grid-cols-3 gap-10 py-4">
+                    <div className="bg-white p-8 rounded-[3rem] shadow-sm border border-stone-100 h-fit space-y-6">
+                        <div className="w-24 h-24 bg-pink-100 text-pink-500 rounded-full mx-auto flex items-center justify-center text-4xl">✨</div>
                         <div className="text-center">
-                            <h3 className="font-black truncate">{user.email}</h3>
-                            <p className="text-[10px] text-stone-400 font-bold uppercase tracking-widest mt-1">Клієнт</p>
+                            <h3 className="font-black text-lg truncate">{user.email}</h3>
+                            {profile.isBlacklisted && <span className="text-[8px] bg-red-100 text-red-600 px-2 py-1 rounded-full font-black uppercase tracking-widest">Обмежений доступ</span>}
                         </div>
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-black uppercase text-stone-400 ml-2">Ваш Instagram</label>
-                            <div className="relative">
-                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-pink-500 font-bold">@</span>
-                                <input value={ig} onChange={e => setIg(e.target.value.replace('@', ''))} className="w-full p-4 pl-9 bg-stone-50 rounded-2xl outline-none focus:ring-2 ring-pink-500 transition" placeholder="username" />
+                        <div className="space-y-4 pt-4">
+                            <div>
+                                <label className="text-[10px] font-black uppercase text-stone-400 ml-2 block mb-1">Мій Instagram</label>
+                                <div className="relative">
+                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-pink-500 font-bold">@</span>
+                                    <input value={ig} onChange={e => setIg(e.target.value.replace('@',''))} className="w-full p-4 pl-9 bg-stone-50 rounded-2xl outline-none focus:ring-2 ring-pink-500" placeholder="username" />
+                                </div>
                             </div>
-                            <button onClick={() => onUpdateProfile({instagram: ig})} className="w-full bg-stone-900 text-white py-3 rounded-2xl font-bold text-sm">Зберегти</button>
+                            <button onClick={updateIg} className="w-full bg-stone-900 text-white py-4 rounded-2xl font-bold transition hover:bg-black">Зберегти зміни</button>
                         </div>
                     </div>
-
                     <div className="md:col-span-2 space-y-6">
-                        <h2 className="text-2xl font-black">Історія візитів</h2>
-                        <div className="space-y-3">
-                            {appointments.length === 0 ? (
-                                <div className="p-20 text-center text-stone-300 font-bold border-2 border-dashed rounded-[2.5rem]">У вас ще немає записів</div>
-                            ) : (
-                                appointments.map(a => (
-                                    <div key={a.id} className="bg-white p-6 rounded-2xl border border-stone-100 flex justify-between items-center">
-                                        <div>
-                                            <p className="font-black">{a.service}</p>
-                                            <p className="text-xs text-stone-400 font-bold">{a.date} • {a.time}</p>
-                                        </div>
-                                        <div className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase ${a.status==='confirmed'?'bg-green-100 text-green-600' : a.status==='pending' ? 'bg-yellow-100 text-yellow-600' : 'bg-stone-100 text-stone-400'}`}>
-                                            {a.status === 'confirmed' ? 'Підтверджено' : a.status === 'pending' ? 'В обробці' : 'Скасовано'}
-                                        </div>
+                        <h2 className="text-3xl font-black">Історія візитів</h2>
+                        <div className="grid gap-4">
+                            {appointments.sort((a,b)=>new Date(b.date)-new Date(a.date)).map(a => (
+                                <div key={a.id} className="bg-white p-6 rounded-3xl border border-stone-50 shadow-sm flex justify-between items-center group hover:border-pink-200 transition">
+                                    <div>
+                                        <p className="font-black text-xl group-hover:text-pink-500 transition">{a.service}</p>
+                                        <p className="text-xs text-stone-400 font-bold uppercase tracking-wider">{a.date} в {a.time}</p>
                                     </div>
-                                ))
-                            )}
+                                    <div className={`text-[10px] font-black uppercase px-4 py-2 rounded-full ${a.status==='confirmed'?'bg-green-50 text-green-600':'bg-stone-50 text-stone-400'}`}>
+                                        {a.status === 'confirmed' ? 'Підтверджено' : a.status === 'pending' ? 'Очікування' : 'Відхилено'}
+                                    </div>
+                                </div>
+                            ))}
+                            {appointments.length === 0 && <div className="p-20 text-center text-stone-300 font-black italic">У вас ще не було візитів</div>}
                         </div>
                     </div>
                 </div>
             );
         }
 
-        function AdminPanel({ appointments, customSchedule, onUpdateStatus, onUpdateSchedule }) {
-            const [activeTab, setActiveTab] = useState('requests');
-            const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-            const [currentMonth, setCurrentMonth] = useState(new Date());
-            const [clientHistory, setClientHistory] = useState(null);
+        function AdminDashboard({ appointments, customSchedule }) {
+            const [viewMode, setViewMode] = useState('weekly'); // 'weekly', 'users', 'config'
+            const [selectedUser, setSelectedUser] = useState(null);
+            
+            const today = new Date();
+            const weekDays = Array.from({length: 7}, (_, i) => {
+                const d = new Date();
+                d.setDate(today.getDate() + i);
+                return d.toISOString().split('T')[0];
+            });
 
-            // Календарні розрахунки
-            const daysInMonth = (month) => {
-                const year = month.getFullYear();
-                const m = month.getMonth();
-                const days = new Date(year, m + 1, 0).getDate();
-                const firstDay = new Date(year, m, 1).getDay();
-                return { days, firstDay: firstDay === 0 ? 6 : firstDay - 1 };
+            const income = useMemo(() => {
+                return appointments
+                    .filter(a => a.status === 'confirmed')
+                    .reduce((sum, a) => sum + (SERVICES.find(s=>s.name===a.service)?.price || 0), 0);
+            }, [appointments]);
+
+            const updateStatus = (id, s) => firebase.firestore().collection("appointments").doc(id).update({status: s});
+            const toggleBlacklist = async (uid, current) => {
+                await firebase.firestore().collection("users").doc(uid).set({isBlacklisted: !current}, {merge: true});
+                alert("Статус клієнта змінено");
             };
 
-            const { days, firstDay } = daysInMonth(currentMonth);
-
-            const isDayWithAppointments = (dateStr) => appointments.some(a => a.date === dateStr && a.status === 'confirmed');
-            const isDayWithRequests = (dateStr) => appointments.some(a => a.date === dateStr && a.status === 'pending');
-
             return (
-                <div className="space-y-8">
-                    <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-                        <h2 className="text-3xl font-black">Панель Адміністратора</h2>
-                        <div className="flex bg-stone-100 p-1 rounded-2xl gap-1">
-                            {['requests', 'calendar', 'schedule'].map(t => (
-                                <button key={t} onClick={() => setActiveTab(t)} className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase transition ${activeTab===t ? 'bg-white shadow-sm' : 'text-stone-400'}`}>
-                                    {t === 'requests' ? 'Запити' : t === 'calendar' ? 'Календар' : 'Графік'}
-                                </button>
-                            ))}
+                <div className="space-y-10">
+                    {/* Admin Header Stats */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="bg-white p-6 rounded-3xl border shadow-sm">
+                            <p className="text-[10px] font-black text-stone-400 uppercase">Дохід</p>
+                            <p className="text-2xl font-black text-pink-500">{income} ₴</p>
                         </div>
+                        <div className="bg-white p-6 rounded-3xl border shadow-sm">
+                            <p className="text-[10px] font-black text-stone-400 uppercase">Нові запити</p>
+                            <p className="text-2xl font-black text-yellow-500">{appointments.filter(a=>a.status==='pending').length}</p>
+                        </div>
+                        <div className="bg-stone-900 text-white p-6 rounded-3xl shadow-sm">
+                            <p className="text-[10px] font-black text-stone-500 uppercase">Сьогодні</p>
+                            <p className="text-2xl font-black">{appointments.filter(a=>a.date===today.toISOString().split('T')[0] && a.status==='confirmed').length} записів</p>
+                        </div>
+                        <button onClick={()=>setViewMode('config')} className="bg-pink-50 p-6 rounded-3xl border border-pink-100 flex items-center justify-center font-black text-xs text-pink-600 uppercase">⚙️ Налаштування</button>
                     </div>
 
-                    {activeTab === 'requests' && (
-                        <div className="space-y-4">
-                            {appointments.filter(a => a.status === 'pending').map(a => (
-                                <div key={a.id} className="bg-white p-6 rounded-3xl border border-stone-100 shadow-sm flex flex-col md:flex-row justify-between items-center gap-4">
-                                    <div className="flex-1">
-                                        <div className="flex items-center gap-3">
-                                            <span className="font-black text-xl">{a.service}</span>
-                                            <button onClick={() => setClientHistory(a.userId)} className="bg-pink-100 text-pink-500 text-[10px] px-2 py-0.5 rounded font-black uppercase hover:bg-pink-200">@{a.instagram}</button>
-                                        </div>
-                                        <p className="text-stone-400 font-bold">{a.date} о {a.time} • {a.userEmail}</p>
-                                    </div>
-                                    <div className="flex gap-2 w-full md:w-auto">
-                                        <button onClick={() => onUpdateStatus(a.id, 'confirmed')} className="flex-1 bg-green-500 text-white px-6 py-3 rounded-xl font-bold">Прийняти</button>
-                                        <button onClick={() => onUpdateStatus(a.id, 'rejected')} className="flex-1 bg-stone-100 text-red-500 px-6 py-3 rounded-xl font-bold">Відхилити</button>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
+                    <div className="flex gap-4">
+                        <button onClick={()=>setViewMode('weekly')} className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase ${viewMode==='weekly'?'bg-stone-900 text-white':'bg-white text-stone-400 border'}`}>Тиждень</button>
+                        <button onClick={()=>setViewMode('users')} className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase ${viewMode==='users'?'bg-stone-900 text-white':'bg-white text-stone-400 border'}`}>Клієнти</button>
+                    </div>
 
-                    {activeTab === 'calendar' && (
-                        <div className="grid md:grid-cols-2 gap-10">
-                            <div className="bg-white p-8 rounded-[3rem] shadow-sm border border-stone-100 h-fit">
-                                <div className="flex justify-between items-center mb-8">
-                                    <button onClick={() => setCurrentMonth(new Date(currentMonth.setMonth(currentMonth.getMonth()-1)))} className="p-2 bg-stone-50 rounded-full">←</button>
-                                    <h3 className="font-black uppercase tracking-widest text-sm">{currentMonth.toLocaleString('uk-UA', {month: 'long', year: 'numeric'})}</h3>
-                                    <button onClick={() => setCurrentMonth(new Date(currentMonth.setMonth(currentMonth.getMonth()+1)))} className="p-2 bg-stone-50 rounded-full">→</button>
-                                </div>
-                                <div className="calendar-grid gap-2 text-center text-[10px] font-black text-stone-300 uppercase mb-4">
-                                    {['Пн','Вт','Ср','Чт','Пт','Сб','Нд'].map(d => <div key={d}>{d}</div>)}
-                                </div>
-                                <div className="calendar-grid gap-2">
-                                    {Array(firstDay).fill(0).map((_, i) => <div key={`empty-${i}`}></div>)}
-                                    {Array.from({length: days}, (_, i) => {
-                                        const dateObj = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), i + 1);
-                                        const dateStr = dateObj.toISOString().split('T')[0];
-                                        const hasApp = isDayWithAppointments(dateStr);
-                                        const hasReq = isDayWithRequests(dateStr);
-                                        return (
-                                            <button key={i} onClick={() => setSelectedDate(dateStr)} className={`aspect-square rounded-xl text-xs font-black relative flex items-center justify-center ${selectedDate === dateStr ? 'bg-stone-900 text-white' : 'bg-stone-50 text-stone-600 hover:bg-stone-100'}`}>
-                                                {i + 1}
-                                                {hasApp && <div className="absolute bottom-1 w-1 h-1 bg-green-500 rounded-full"></div>}
-                                                {hasReq && <div className="absolute top-1 right-1 w-1.5 h-1.5 bg-pink-500 rounded-full animate-pulse"></div>}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                            <div className="space-y-4">
-                                <h3 className="font-black text-xl">Записи на {selectedDate}</h3>
-                                {appointments.filter(a => a.date === selectedDate).length === 0 ? (
-                                    <div className="p-10 bg-stone-50 rounded-3xl text-stone-300 font-bold text-center">На цей день немає записів</div>
-                                ) : (
-                                    appointments.filter(a => a.date === selectedDate).map(a => (
-                                        <div key={a.id} className="bg-white p-6 rounded-2xl border border-stone-100 flex justify-between items-center shadow-sm">
-                                            <div>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="font-black">{a.time}</span>
-                                                    <span className={`w-2 h-2 rounded-full ${a.status==='confirmed'?'bg-green-500':'bg-yellow-500'}`}></span>
+                    {viewMode === 'weekly' && (
+                        <div className="overflow-x-auto no-scrollbar pb-4">
+                            <div className="flex gap-4 min-w-[1000px]">
+                                {weekDays.map(date => (
+                                    <div key={date} className="flex-1 space-y-3">
+                                        <div className="text-center p-4 bg-white rounded-3xl border mb-6">
+                                            <p className="text-[10px] font-black text-stone-300 uppercase leading-none mb-1">{new Date(date).toLocaleDateString('uk-UA', {weekday: 'short'})}</p>
+                                            <p className="font-black text-lg">{new Date(date).getDate()}</p>
+                                        </div>
+                                        {(customSchedule[date] || DEFAULT_SLOTS).map(t => {
+                                            const app = appointments.find(a => a.date === date && a.time === t);
+                                            return (
+                                                <div key={t} className={`p-4 rounded-2xl border min-h-[100px] flex flex-col justify-between transition ${!app ? 'bg-stone-50/50 border-dashed border-stone-200' : app.status==='pending' ? 'bg-yellow-50 border-yellow-200' : 'bg-white border-green-200 shadow-sm'}`}>
+                                                    <div className="flex justify-between items-start">
+                                                        <span className="text-[10px] font-black text-stone-400">{t}</span>
+                                                        {app && <button onClick={() => setSelectedUser(app.userId)} className="text-[8px] bg-pink-100 text-pink-500 px-1.5 py-0.5 rounded uppercase font-black">Detail</button>}
+                                                    </div>
+                                                    {app ? (
+                                                        <div className="mt-2">
+                                                            <p className="text-[11px] font-black leading-tight truncate">{app.service}</p>
+                                                            <p className="text-[9px] font-bold text-stone-400 truncate">@{app.instagram}</p>
+                                                            <div className="flex gap-1 mt-2">
+                                                                {app.status === 'pending' && <button onClick={()=>updateStatus(app.id, 'confirmed')} className="flex-1 bg-green-500 text-white text-[8px] font-black py-1 rounded">Ok</button>}
+                                                                <button onClick={()=>updateStatus(app.id, 'rejected')} className="flex-1 bg-stone-100 text-stone-400 text-[8px] font-black py-1 rounded">X</button>
+                                                            </div>
+                                                        </div>
+                                                    ) : (
+                                                        <p className="text-[9px] font-black text-stone-300 uppercase italic">Вільно</p>
+                                                    )}
                                                 </div>
-                                                <p className="text-xs text-stone-400 font-bold">{a.service} • @{a.instagram}</p>
-                                            </div>
-                                            <div className="flex gap-1">
-                                                <button onClick={() => onUpdateStatus(a.id, 'confirmed')} className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100">✓</button>
-                                                <button onClick={() => onUpdateStatus(a.id, 'rejected')} className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100">✕</button>
-                                            </div>
-                                        </div>
-                                    ))
-                                )}
+                                            );
+                                        })}
+                                    </div>
+                                ))}
                             </div>
                         </div>
                     )}
 
-                    {activeTab === 'schedule' && (
-                        <div className="max-w-xl mx-auto bg-white p-10 rounded-[3rem] shadow-sm border border-stone-100">
-                            <h3 className="text-2xl font-black mb-6 text-center">Налаштування годин</h3>
-                            <input type="date" value={selectedDate} className="w-full p-4 bg-stone-50 rounded-2xl outline-none mb-6" onChange={e => setSelectedDate(e.target.value)} />
+                    {viewMode === 'users' && (
+                        <div className="grid md:grid-cols-2 gap-4">
+                            {Array.from(new Set(appointments.map(a=>a.userId))).map(uid => {
+                                const lastApp = appointments.filter(a=>a.userId===uid).pop();
+                                return (
+                                    <div key={uid} className="bg-white p-6 rounded-3xl border shadow-sm flex justify-between items-center">
+                                        <div onClick={()=>setSelectedUser(uid)} className="cursor-pointer">
+                                            <p className="font-black text-lg">@{lastApp?.instagram || 'Клієнт'}</p>
+                                            <p className="text-xs text-stone-400 font-medium">{lastApp?.userEmail}</p>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <button onClick={()=>toggleBlacklist(uid, false)} className="text-[10px] font-black uppercase text-red-500 bg-red-50 px-4 py-2 rounded-xl">Blacklist</button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+
+                    {viewMode === 'config' && (
+                        <div className="max-w-md mx-auto bg-white p-8 rounded-[3rem] border shadow-sm space-y-6">
+                            <h3 className="text-xl font-black text-center uppercase tracking-widest">Керування годинами</h3>
                             <div className="space-y-4">
-                                <div className="flex flex-wrap gap-2">
-                                    {(customSchedule[selectedDate] || DEFAULT_TIME_SLOTS).map(t => (
-                                        <div key={t} className="flex items-center gap-2 bg-stone-900 text-white px-4 py-2 rounded-xl font-bold text-xs">
-                                            {t}
-                                            <button onClick={() => {
-                                                const current = customSchedule[selectedDate] || DEFAULT_TIME_SLOTS;
-                                                onUpdateSchedule(selectedDate, current.filter(x => x !== t));
-                                            }} className="text-pink-400">✕</button>
+                                <input type="date" id="conf-date" className="w-full p-4 bg-stone-50 rounded-2xl outline-none" />
+                                <div className="flex gap-2">
+                                    <input type="time" id="conf-time" className="flex-1 p-4 bg-stone-50 rounded-2xl outline-none" />
+                                    <button onClick={async ()=>{
+                                        const d = document.getElementById('conf-date').value;
+                                        const t = document.getElementById('conf-time').value;
+                                        if(!d || !t) return;
+                                        const curr = customSchedule[d] || DEFAULT_SLOTS;
+                                        await firebase.firestore().collection("settings").doc("schedule").set({[d]: [...new Set([...curr, t])].sort()}, {merge:true});
+                                        alert("Час додано");
+                                    }} className="bg-stone-900 text-white px-6 rounded-2xl font-black">+</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {selectedUser && (
+                        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-md z-[200] flex items-center justify-center p-6">
+                            <div className="bg-white w-full max-w-lg rounded-[3rem] p-10 relative max-h-[80vh] overflow-y-auto">
+                                <button onClick={()=>setSelectedUser(null)} className="absolute top-8 right-8 text-stone-300 font-black">✕</button>
+                                <h2 className="text-2xl font-black mb-8 italic font-serif text-pink-500">Досьє клієнта</h2>
+                                <div className="space-y-4">
+                                    {appointments.filter(a=>a.userId===selectedUser).map(a => (
+                                        <div key={a.id} className="p-4 border border-stone-100 rounded-2xl">
+                                            <div className="flex justify-between">
+                                                <p className="font-black uppercase text-xs">{a.service}</p>
+                                                <span className="text-[10px] text-stone-400 font-bold">{a.status}</span>
+                                            </div>
+                                            <p className="text-stone-400 text-[10px] mt-1">{a.date} о {a.time}</p>
                                         </div>
                                     ))}
                                 </div>
-                                <div className="pt-6 border-t border-stone-100 flex gap-2">
-                                    <input id="new-slot" type="time" className="flex-1 p-4 bg-stone-50 rounded-2xl outline-none" />
-                                    <button onClick={() => {
-                                        const val = document.getElementById('new-slot').value;
-                                        if (!val) return;
-                                        const current = customSchedule[selectedDate] || DEFAULT_TIME_SLOTS;
-                                        if (current.includes(val)) return;
-                                        onUpdateSchedule(selectedDate, [...current, val].sort());
-                                    }} className="bg-pink-500 text-white px-6 rounded-2xl font-bold">+</button>
-                                </div>
                             </div>
                         </div>
                     )}
-
-                    {clientHistory && (
-                        <ClientHistoryModal 
-                            userId={clientHistory} 
-                            appointments={appointments} 
-                            onClose={() => setClientHistory(null)} 
-                        />
-                    )}
                 </div>
             );
         }
 
-        function ClientHistoryModal({ userId, appointments, onClose }) {
-            const history = appointments.filter(a => a.userId === userId);
-            const ig = history[0]?.instagram || 'Клієнт';
-            return (
-                <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-6">
-                    <div className="bg-white w-full max-w-lg rounded-[3rem] p-10 shadow-2xl relative max-h-[80vh] overflow-y-auto">
-                        <button onClick={onClose} className="absolute top-8 right-8 text-stone-300">✕</button>
-                        <h2 className="text-2xl font-black mb-8">Історія @{ig}</h2>
-                        <div className="space-y-3">
-                            {history.map(a => (
-                                <div key={a.id} className="p-5 border border-stone-100 rounded-2xl flex justify-between items-center">
-                                    <div>
-                                        <p className="font-bold">{a.service}</p>
-                                        <p className="text-xs text-stone-400 font-bold">{a.date} о {a.time}</p>
-                                    </div>
-                                    <span className="text-[10px] font-black uppercase text-stone-400">{a.status}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-            );
-        }
+        // --- ICONS ---
+        const IconHome = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>;
+        const IconCalendar = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>;
+        const IconUser = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>;
+        const IconShield = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>;
+        const IconLogin = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>;
 
         function LoginModal({ onClose }) {
             const [isReg, setIsReg] = useState(false);
@@ -496,14 +481,14 @@
             return (
                 <div className="fixed inset-0 bg-stone-900/40 backdrop-blur-md z-[100] flex items-center justify-center p-6">
                     <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-10 shadow-2xl relative">
-                        <button onClick={onClose} className="absolute top-6 right-6 text-stone-300">✕</button>
+                        <button onClick={onClose} className="absolute top-6 right-6 text-stone-300 hover:text-stone-500 transition">✕</button>
                         <h2 className="text-3xl font-black mb-8">{isReg ? 'Реєстрація' : 'Вхід'}</h2>
                         <form className="space-y-4" onSubmit={handleAuth}>
-                            <input type="email" placeholder="Email" required className="w-full p-4 bg-stone-50 rounded-xl outline-none border focus:border-pink-500" value={email} onChange={e => setEmail(e.target.value)} />
-                            <input type="password" placeholder="Пароль" required className="w-full p-4 bg-stone-50 rounded-xl outline-none border focus:border-pink-500" value={pass} onChange={e => setPass(e.target.value)} />
-                            <button className="w-full bg-pink-500 text-white py-4 rounded-xl font-bold shadow-lg shadow-pink-100">{isReg ? 'Створити акаунт' : 'Увійти'}</button>
+                            <input type="email" placeholder="Email" required className="w-full p-4 bg-stone-50 rounded-xl outline-none border focus:border-pink-500 transition" value={email} onChange={e => setEmail(e.target.value)} />
+                            <input type="password" placeholder="Пароль" required className="w-full p-4 bg-stone-50 rounded-xl outline-none border focus:border-pink-500 transition" value={pass} onChange={e => setPass(e.target.value)} />
+                            <button className="w-full bg-pink-500 text-white py-4 rounded-xl font-bold shadow-lg shadow-pink-100 hover:bg-pink-600 transition">{isReg ? 'Створити акаунт' : 'Увійти'}</button>
                         </form>
-                        <button onClick={() => setIsReg(!isReg)} className="w-full mt-6 text-[10px] font-black text-stone-400 uppercase tracking-widest">{isReg ? 'Вже є акаунт? Увійти' : 'Немає акаунту? Реєстрація'}</button>
+                        <button onClick={() => setIsReg(!isReg)} className="w-full mt-6 text-[10px] font-black text-stone-400 uppercase tracking-widest hover:text-stone-600 transition">{isReg ? 'Вже є акаунт? Увійти' : 'Немає акаунту? Реєстрація'}</button>
                     </div>
                 </div>
             );
